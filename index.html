@@ -697,7 +697,7 @@
 
 <!-- MARKET BREADTH PANEL -->
 <div class="breadth-panel">
-  <div class="breadth-label">▸ Market Breadth — Theme Holdings (~120 stocks)</div>
+  <div class="breadth-label">▸ Market Breadth — Theme Holdings (~150 stocks)</div>
   <div class="breadth-grid" id="breadthGrid">
     <!-- rendered by JS -->
     <div class="breadth-card"><div class="breadth-card-title">Advance / Decline</div><div class="breadth-value loading">···</div></div>
@@ -739,7 +739,7 @@
 
 <div class="status-bar">
   <div class="status-left">
-    <div class="status-item">THEMES <span id="statusLoaded">0</span>/16</div>
+    <div class="status-item">THEMES <span id="statusLoaded">0</span>/19</div>
     <div class="status-item">SOURCE <span>YAHOO FINANCE</span></div>
   </div>
   <div class="status-item">DATA MAY BE DELAYED 15–20 MIN</div>
@@ -876,6 +876,30 @@ const THEMES = [
     color: '#f8bbd0',
     category: 'CONSUMER',
     holdings: ['CPRI','RL','TPR','RH','PVH','BARK','BURL']
+  },
+  {
+    id: 'crypto',
+    name: 'CRYPTO & BLOCKCHAIN',
+    etf: 'BKCH',
+    color: '#f7931a',
+    category: 'TECHNOLOGY',
+    holdings: ['COIN','MSTR','MARA','RIOT','CLSK','HUT','BTBT','CIFR','WULF','SQ']
+  },
+  {
+    id: 'software',
+    name: 'SOFTWARE',
+    etf: 'IGV',
+    color: '#29b6f6',
+    category: 'TECHNOLOGY',
+    holdings: ['MSFT','CRM','ORCL','NOW','ADBE','INTU','WDAY','SNOW','PLTR','DDOG']
+  },
+  {
+    id: 'healthcare',
+    name: 'HEALTHCARE & BIOTECH',
+    etf: 'XBI',
+    color: '#26c6da',
+    category: 'HEALTHCARE',
+    holdings: ['LLY','UNH','ABBV','MRK','AMGN','GILD','VRTX','REGN','MRNA','BNTX']
   }
 ];
 
