@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>THEME//DECK — Thematic Stock Performance</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Bebas+Neue&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080b0f;
+    --bg2: #0d1117;
+    --bg3: #131920;
+    --border: #1e2a38;
+    --border2: #253040;
+    --text: #c8d8e8;
+    --text2: #6a8aa0;
+    --text3: #3d5568;
+    --green: #00e676;
+    --green-dim: #00e67622;
+    --red: #ff4444;
+    --red-dim: #ff444422;
+    --flat: #4a6070;
+    --flat-dim: #4a607022;
+    --accent: #00b4ff;
+    --accent-dim: #00b4ff15;
+    --gold: #ffd700;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.03) 2px,
+      rgba(0,0,0,0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 20px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(8px);
+  }
+
+  .logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+    letter-spacing: 3px;
+    color: var(--accent);
+    text-shadow: 0 0 20px rgba(0,180,255,0.4);
+  }
+
+  .logo span { color: var(--text2); }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .live-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  .last-update {
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 0.5px;
+  }
+
+  /* Timeframe tabs */
+  .controls {
+    padding: 16px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+  }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px;
+  }
+
+  .tab {
+    padding: 6px 16px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    color: var(--text2);
+    cursor: pointer;
+    border-radius: 4px;
+    border: none;
+    background: transparent;
+    transition: all 0.15s;
+    text-transform: uppercase;
+  }
+
+  .tab:hover { color: var(--text); background: var(--border); }
+
+  .tab.active {
+    background: var(--accent);
+    color: #000;
+  }
+
+  .refresh-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 16px;
+    background: transparent;
+    border: 1px solid var(--border2);
+    border-radius: 5px;
+    color: var(--text2);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.5px;
+  }
+
+  .refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .refresh-btn.loading { opacity: 0.5; pointer-events: none; }
+  .refresh-btn.loading .refresh-icon { animation: spin 1s linear infinite; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .refresh-icon { display: inline-block; font-size: 13px; }
+
+  /* Theme grid */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1px;
+    background: var(--border);
+    border-top: none;
+  }
+
+  .theme-card {
+    background: var(--bg2);
+    padding: 20px 22px;
+    cursor: pointer;
+    transition: background 0.15s;
+    position: relative;
+    overflow: hidden;
+    min-height: 130px;
+  }
+
+  .theme-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--card-color, var(--accent));
+    opacity: 0.7;
+  }
+
+  .theme-card:hover {
+    background: var(--bg3);
+  }
+
+  .theme-card:hover::before { opacity: 1; }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+  }
+
+  .theme-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 20px;
+    letter-spacing: 2px;
+    color: var(--text);
+    line-height: 1;
+  }
+
+  .etf-ticker {
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 1px;
+    margin-top: 3px;
+  }
+
+  .perf-badge {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    line-height: 1;
+  }
+
+  .perf-badge.pos { color: var(--green); }
+  .perf-badge.neg { color: var(--red); }
+  .perf-badge.flat { color: var(--flat); }
+  .perf-badge.loading { color: var(--text3); font-size: 12px; font-weight: 400; }
+
+  .card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .top-movers {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .mover-chip {
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    letter-spacing: 0.5px;
+    font-weight: 500;
+  }
+
+  .mover-chip.pos { background: var(--green-dim); color: var(--green); border: 1px solid rgba(0,230,118,0.2); }
+  .mover-chip.neg { background: var(--red-dim); color: var(--red); border: 1px solid rgba(255,68,68,0.2); }
+
+  .holdings-count {
+    font-size: 9px;
+    color: var(--text3);
+    letter-spacing: 0.5px;
+  }
+
+  .expand-hint {
+    font-size: 9px;
+    color: var(--text3);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* Sparkline bar */
+  .perf-bar {
+    height: 2px;
+    background: var(--border);
+    border-radius: 2px;
+    margin: 12px 0 10px;
+    overflow: hidden;
+  }
+
+  .perf-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.6s ease;
+    max-width: 100%;
+  }
+
+  .perf-bar-fill.pos { background: var(--green); }
+  .perf-bar-fill.neg { background: var(--red); }
+
+  /* Error state */
+  .error-card {
+    font-size: 10px;
+    color: var(--red);
+    margin-top: 6px;
+  }
+
+  /* Modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(8,11,15,0.92);
+    z-index: 500;
+    backdrop-filter: blur(4px);
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--bg2);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    width: 90%;
+    max-width: 640px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 40px 80px rgba(0,0,0,0.6);
+  }
+
+  .modal-header {
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .modal-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 26px;
+    letter-spacing: 2px;
+    color: var(--text);
+  }
+
+  .modal-subtitle {
+    font-size: 10px;
+    color: var(--text3);
+    margin-top: 2px;
+    letter-spacing: 1px;
+  }
+
+  .modal-etf-perf {
+    text-align: right;
+  }
+
+  .modal-etf-label {
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 1px;
+    margin-bottom: 2px;
+  }
+
+  .modal-etf-pct {
+    font-size: 22px;
+    font-weight: 700;
+  }
+
+  .modal-etf-pct.pos { color: var(--green); }
+  .modal-etf-pct.neg { color: var(--red); }
+
+  .close-btn {
+    background: none;
+    border: none;
+    color: var(--text3);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 2px 6px;
+    line-height: 1;
+    margin-left: 16px;
+    transition: color 0.15s;
+  }
+
+  .close-btn:hover { color: var(--text); }
+
+  .modal-body {
+    overflow-y: auto;
+    flex: 1;
+    padding: 8px 0;
+  }
+
+  .holdings-table {
+    width: 100%;
+  }
+
+  .holding-row {
+    display: grid;
+    grid-template-columns: 56px 1fr 90px 90px;
+    align-items: center;
+    padding: 10px 24px;
+    cursor: pointer;
+    transition: background 0.1s;
+    border-bottom: 1px solid rgba(30,42,56,0.5);
+    text-decoration: none;
+  }
+
+  .holding-row:hover { background: var(--bg3); }
+
+  .holding-rank {
+    font-size: 10px;
+    color: var(--text3);
+    font-weight: 400;
+  }
+
+  .holding-info {}
+
+  .holding-ticker {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: 0.5px;
+  }
+
+  .holding-name {
+    font-size: 9px;
+    color: var(--text3);
+    margin-top: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+  }
+
+  .holding-price {
+    font-size: 12px;
+    color: var(--text2);
+    text-align: right;
+  }
+
+  .holding-pct {
+    font-size: 14px;
+    font-weight: 600;
+    text-align: right;
+  }
+
+  .holding-pct.pos { color: var(--green); }
+  .holding-pct.neg { color: var(--red); }
+  .holding-pct.flat { color: var(--flat); }
+  .holding-pct.loading { color: var(--text3); font-size: 10px; font-weight: 400; }
+
+  .holding-bar {
+    height: 2px;
+    background: var(--border);
+    margin-top: 3px;
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .holding-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+  }
+
+  .holding-bar-fill.pos { background: var(--green); }
+  .holding-bar-fill.neg { background: var(--red); }
+
+  .modal-footer {
+    padding: 12px 24px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .modal-footer-note {
+    font-size: 9px;
+    color: var(--text3);
+    letter-spacing: 0.5px;
+  }
+
+  .tv-link {
+    font-size: 10px;
+    color: var(--accent);
+    text-decoration: none;
+    letter-spacing: 0.5px;
+    transition: opacity 0.15s;
+  }
+
+  .tv-link:hover { opacity: 0.7; }
+
+  /* Status bar */
+  .status-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    padding: 6px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 9px;
+    color: var(--text3);
+    letter-spacing: 0.5px;
+    z-index: 200;
+  }
+
+  .status-left { display: flex; gap: 20px; }
+
+  .status-item span { color: var(--text2); }
+
+  /* Loading skeleton */
+  @keyframes shimmer {
+    0% { opacity: 0.3; }
+    50% { opacity: 0.7; }
+    100% { opacity: 0.3; }
+  }
+
+  .skeleton {
+    animation: shimmer 1.5s infinite;
+    background: var(--border);
+    border-radius: 3px;
+    display: inline-block;
+  }
+
+  /* Category headers */
+  .category-header {
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 22px 8px;
+    font-size: 9px;
+    color: var(--text3);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    grid-column: 1 / -1;
+  }
+
+  .main-content { padding-bottom: 36px; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg2); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  /* Responsive */
+  @media (max-width: 600px) {
+    .grid { grid-template-columns: 1fr; }
+    .holding-row { grid-template-columns: 40px 1fr 70px; }
+    .holding-price { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">THEME<span>//</span>DECK</div>
+  <div class="header-right">
+    <div class="live-indicator">
+      <div class="live-dot"></div>
+      <span>LIVE</span>
+    </div>
+    <div class="last-update" id="lastUpdate">—</div>
+  </div>
+</header>
+
+<div class="controls">
+  <div class="tabs">
+    <button class="tab active" data-tf="1D">1D</button>
+    <button class="tab" data-tf="5D">5D</button>
+    <button class="tab" data-tf="1M">1M</button>
+    <button class="tab" data-tf="YTD">YTD</button>
+  </div>
+  <button class="refresh-btn" id="refreshBtn">
+    <span class="refresh-icon">↻</span>
+    REFRESH
+  </button>
+</div>
+
+<div class="main-content">
+  <div class="grid" id="themeGrid"></div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modalTitle">—</div>
+        <div class="modal-subtitle" id="modalSubtitle">—</div>
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:12px">
+        <div class="modal-etf-perf">
+          <div class="modal-etf-label" id="modalEtfLabel">ETF</div>
+          <div class="modal-etf-pct" id="modalEtfPct">—</div>
+        </div>
+        <button class="close-btn" id="closeModal">✕</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="holdings-table" id="holdingsTable"></div>
+    </div>
+    <div class="modal-footer">
+      <div class="modal-footer-note">Click any stock to open TradingView chart ↗</div>
+      <a class="tv-link" id="modalEtfTvLink" href="#" target="_blank" rel="noopener">View ETF on TradingView ↗</a>
+    </div>
+  </div>
+</div>
+
+<div class="status-bar">
+  <div class="status-left">
+    <div class="status-item">THEMES <span id="statusLoaded">0</span>/16</div>
+    <div class="status-item">SOURCE <span>YAHOO FINANCE</span></div>
+  </div>
+  <div class="status-item">DATA MAY BE DELAYED 15–20 MIN</div>
+</div>
+
+<script>
+// ─── THEME DATA ───────────────────────────────────────────────────────────────
+
+const THEMES = [
+  {
+    id: 'uranium',
+    name: 'URANIUM',
+    etf: 'URNM',
+    color: '#ff9800',
+    category: 'ENERGY & RESOURCES',
+    holdings: ['CCJ','NXE','UEC','UUUU','DNN','URG','SMR']
+  },
+  {
+    id: 'rareearth',
+    name: 'RARE EARTH',
+    etf: 'REMX',
+    color: '#8bc34a',
+    category: 'ENERGY & RESOURCES',
+    holdings: ['MP','ALB','LAC','SGML','PLAG','NOVN']
+  },
+  {
+    id: 'copper',
+    name: 'COPPER',
+    etf: 'COPX',
+    color: '#ff7043',
+    category: 'ENERGY & RESOURCES',
+    holdings: ['FCX','SCCO','TECK','HBM','CMMC','ERO']
+  },
+  {
+    id: 'semis',
+    name: 'SEMICONDUCTORS',
+    etf: 'SMH',
+    color: '#00b4ff',
+    category: 'TECHNOLOGY',
+    holdings: ['NVDA','TSM','AVGO','ASML','AMD','AMAT','MU','QCOM','INTC']
+  },
+  {
+    id: 'ai',
+    name: 'AI HARDWARE',
+    etf: 'AIQ',
+    color: '#7c4dff',
+    category: 'TECHNOLOGY',
+    holdings: ['NVDA','MSFT','GOOGL','AMZN','META','SMCI','DELL','HPE']
+  },
+  {
+    id: 'cyber',
+    name: 'CYBERSECURITY',
+    etf: 'HACK',
+    color: '#00e5ff',
+    category: 'TECHNOLOGY',
+    holdings: ['PANW','CRWD','FTNT','ZS','OKTA','CHKP','CSCO','CYBR']
+  },
+  {
+    id: 'quantum',
+    name: 'QUANTUM',
+    etf: 'QTUM',
+    color: '#e040fb',
+    category: 'TECHNOLOGY',
+    holdings: ['IBM','GOOGL','IONQ','RGTI','QBTS','QUBT','MSFT','HON']
+  },
+  {
+    id: 'robotics',
+    name: 'ROBOTICS',
+    etf: 'BOTZ',
+    color: '#40c4ff',
+    category: 'TECHNOLOGY',
+    holdings: ['NVDA','ISRG','ABB','IRBT','BRKS','NNDM','MKFG']
+  },
+  {
+    id: 'defense',
+    name: 'DEFENSE',
+    etf: 'ITA',
+    color: '#ef5350',
+    category: 'DEFENSE & AEROSPACE',
+    holdings: ['LMT','RTX','NOC','GD','BA','KTOS','LDOS','HII','L3H']
+  },
+  {
+    id: 'drones',
+    name: 'DRONES',
+    etf: 'DRNZ',
+    color: '#ff5252',
+    category: 'DEFENSE & AEROSPACE',
+    holdings: ['AVAV','KTOS','RCAT','JOBY','ACHR','ONDS','EQNR','UMAC']
+  },
+  {
+    id: 'space',
+    name: 'SPACE',
+    etf: 'UFO',
+    color: '#b388ff',
+    category: 'DEFENSE & AEROSPACE',
+    holdings: ['IRDM','MAXR','RKT','SPCE','VSAT','ASTR','MNTS']
+  },
+  {
+    id: 'grid',
+    name: 'ELECTRICITY',
+    etf: 'GRID',
+    color: '#ffeb3b',
+    category: 'ENERGY & RESOURCES',
+    holdings: ['NEE','AES','ED','ETR','SO','DUK','EXC','PCG']
+  },
+  {
+    id: 'gold',
+    name: 'GOLD MINERS',
+    etf: 'GDX',
+    color: '#ffd700',
+    category: 'PRECIOUS METALS',
+    holdings: ['NEM','AEM','GOLD','WPM','KGC','AGI','OR','NGD']
+  },
+  {
+    id: 'silver',
+    name: 'SILVER MINERS',
+    etf: 'SIL',
+    color: '#b0bec5',
+    category: 'PRECIOUS METALS',
+    holdings: ['WPM','PAAS','CDE','HL','SSRM','FSM','SILV']
+  },
+  {
+    id: 'retail',
+    name: 'RETAIL',
+    etf: 'XRT',
+    color: '#66bb6a',
+    category: 'CONSUMER',
+    holdings: ['AMZN','WMT','TGT','MELI','CHWY','GME','BBWI','COST']
+  },
+  {
+    id: 'luxury',
+    name: 'LUXURY',
+    etf: 'GLUX',
+    color: '#f8bbd0',
+    category: 'CONSUMER',
+    holdings: ['CPRI','RL','TPR','RH','PVH','BARK','BURL']
+  }
+];
+
+// ─── CORS PROXY ───────────────────────────────────────────────────────────────
+
+const PROXIES = [
+  url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+];
+
+let activeProxy = 0;
+
+async function fetchWithProxy(url) {
+  for (let i = 0; i < PROXIES.length; i++) {
+    const proxyIdx = (activeProxy + i) % PROXIES.length;
+    try {
+      const proxied = PROXIES[proxyIdx](url);
+      const res = await fetch(proxied, { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      activeProxy = proxyIdx;
+      return data;
+    } catch (e) {
+      if (i === PROXIES.length - 1) throw e;
+    }
+  }
+}
+
+// ─── YAHOO FINANCE ────────────────────────────────────────────────────────────
+
+const YF_BASE = 'https://query2.finance.yahoo.com';
+
+async function fetchQuotes(symbols) {
+  const url = `${YF_BASE}/v7/finance/quote?symbols=${symbols.join(',')}&fields=regularMarketPrice,regularMarketChangePercent,regularMarketPreviousClose,shortName,longName`;
+  const data = await fetchWithProxy(url);
+  const result = {};
+  const quotes = data?.quoteResponse?.result || [];
+  for (const q of quotes) {
+    result[q.symbol] = {
+      price: q.regularMarketPrice,
+      changePercent: q.regularMarketChangePercent,
+      prevClose: q.regularMarketPreviousClose,
+      name: q.shortName || q.longName || q.symbol,
+    };
+  }
+  return result;
+}
+
+async function fetchHistory(symbol, range) {
+  // range: '5d', '1mo', 'ytd'
+  const url = `${YF_BASE}/v8/finance/chart/${symbol}?range=${range}&interval=1d`;
+  const data = await fetchWithProxy(url);
+  const closes = data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close;
+  return closes || [];
+}
+
+function calcChangeFromHistory(closes) {
+  if (!closes || closes.length < 2) return null;
+  const valid = closes.filter(v => v != null);
+  if (valid.length < 2) return null;
+  const first = valid[0];
+  const last = valid[valid.length - 1];
+  return ((last - first) / first) * 100;
+}
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+
+let currentTf = '1D';
+const perfData = {}; // { [themeId]: { etf: number|null, holdings: { [sym]: number|null } } }
+let loadedCount = 0;
+
+// ─── RENDERING ────────────────────────────────────────────────────────────────
+
+function fmtPct(v) {
+  if (v == null) return '—';
+  return (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+}
+
+function pctClass(v) {
+  if (v == null) return 'flat';
+  if (v > 0.05) return 'pos';
+  if (v < -0.05) return 'neg';
+  return 'flat';
+}
+
+function barWidth(v, max = 5) {
+  if (v == null) return 0;
+  return Math.min(Math.abs(v) / max * 100, 100);
+}
+
+function tvLink(symbol) {
+  // Guess exchange
+  const nasdaq = ['NVDA','AMD','MSFT','GOOGL','AMZN','META','AAPL','AVGO','QCOM','AMAT','MU','INTC','ASML',
+    'PANW','CRWD','FTNT','ZS','OKTA','IONQ','RGTI','QBTS','QUBT','ISRG','JOBY','ACHR','MELI','CHWY',
+    'SMCI','DELL','CYBR','IRBT','BRKS','NNDM','MKFG','RCAT','ONDS','AVAV','KTOS','SPCE','ASTR','MNTS','BARK','BURL',
+    'CCJ','NXE','UEC','UUUU','DNN','URG','SMR','MP','ALB','LAC','SGML','IRDM','RKT','VSAT','HII','UMAC','EQNR','BBWI','GME'];
+  const nyse = ['LMT','RTX','NOC','GD','BA','LDOS','NEE','AES','ED','ETR','SO','DUK','EXC','PCG','NEM','AEM','GOLD','WPM','KGC',
+    'FCX','SCCO','TECK','HBM','AGI','OR','NGD','PAAS','CDE','HL','SSRM','FSM','SILV','WMT','TGT','AMZN',
+    'IBM','MSFT','GOOGL','COST','RL','TPR','RH','PVH','CPRI','HON','CMMC','ERO','MAXR','PLAG','NOVN','L3H','HPE','PCG'];
+  const ex = nasdaq.includes(symbol) ? 'NASDAQ' : 'NYSE';
+  return `https://www.tradingview.com/chart/?symbol=${ex}%3A${symbol}`;
+}
+
+function renderGrid() {
+  const grid = document.getElementById('themeGrid');
+  const categories = [...new Set(THEMES.map(t => t.category))];
+
+  let html = '';
+  for (const cat of categories) {
+    html += `<div class="category-header">${cat}</div>`;
+    const catThemes = THEMES.filter(t => t.category === cat);
+    for (const theme of catThemes) {
+      const data = perfData[theme.id];
+      const etfPct = data?.etf;
+      const cls = etfPct != null ? pctClass(etfPct) : 'loading';
+      const pctStr = etfPct != null ? fmtPct(etfPct) : '···';
+      const bw = barWidth(etfPct);
+
+      // Top 2 movers from holdings
+      let moversHtml = '';
+      if (data?.holdings) {
+        const pairs = Object.entries(data.holdings)
+          .filter(([,v]) => v != null)
+          .sort((a,b) => Math.abs(b[1]) - Math.abs(a[1]))
+          .slice(0, 3);
+        moversHtml = pairs.map(([sym, pct]) => {
+          const mc = pctClass(pct);
+          return `<span class="mover-chip ${mc}">${sym} ${fmtPct(pct)}</span>`;
+        }).join('');
+      }
+
+      html += `
+        <div class="theme-card" data-id="${theme.id}" style="--card-color:${theme.color}">
+          <div class="card-header">
+            <div>
+              <div class="theme-name">${theme.name}</div>
+              <div class="etf-ticker">${theme.etf} · ${currentTf}</div>
+            </div>
+            <div class="perf-badge ${cls}">${pctStr}</div>
+          </div>
+          <div class="perf-bar">
+            <div class="perf-bar-fill ${cls}" style="width:${bw}%"></div>
+          </div>
+          <div class="card-footer">
+            <div class="top-movers">${moversHtml || '<span style="font-size:9px;color:var(--text3)">loading holdings···</span>'}</div>
+            <div class="expand-hint">DRILL DOWN ↗</div>
+          </div>
+        </div>`;
+    }
+  }
+  grid.innerHTML = html;
+
+  // Attach click handlers
+  grid.querySelectorAll('.theme-card').forEach(card => {
+    card.addEventListener('click', () => openModal(card.dataset.id));
+  });
+}
+
+function updateStatusBar() {
+  document.getElementById('statusLoaded').textContent = loadedCount;
+}
+
+// ─── MODAL ────────────────────────────────────────────────────────────────────
+
+let currentModalTheme = null;
+
+function openModal(themeId) {
+  const theme = THEMES.find(t => t.id === themeId);
+  if (!theme) return;
+  currentModalTheme = theme;
+
+  document.getElementById('modalTitle').textContent = theme.name;
+  document.getElementById('modalSubtitle').textContent = `${theme.etf} · ${theme.holdings.length} holdings · ${currentTf}`;
+  document.getElementById('modalEtfLabel').textContent = theme.etf;
+
+  const etfPct = perfData[themeId]?.etf;
+  const etfEl = document.getElementById('modalEtfPct');
+  etfEl.textContent = etfPct != null ? fmtPct(etfPct) : '—';
+  etfEl.className = 'modal-etf-pct ' + pctClass(etfPct);
+
+  document.getElementById('modalEtfTvLink').href = tvLink(theme.etf);
+
+  renderHoldings(theme);
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function renderHoldings(theme) {
+  const table = document.getElementById('holdingsTable');
+  const holdingsData = perfData[theme.id]?.holdings || {};
+
+  // Sort by absolute pct change (loading ones go to bottom)
+  const sorted = [...theme.holdings]
+    .map(sym => ({ sym, pct: holdingsData[sym] ?? null }))
+    .sort((a, b) => {
+      if (a.pct == null && b.pct == null) return 0;
+      if (a.pct == null) return 1;
+      if (b.pct == null) return -1;
+      return b.pct - a.pct; // highest first (best performers at top)
+    });
+
+  const maxAbs = Math.max(...sorted.filter(x => x.pct != null).map(x => Math.abs(x.pct)), 1);
+
+  let html = '';
+  sorted.forEach(({ sym, pct }, i) => {
+    const cls = pct != null ? pctClass(pct) : 'loading';
+    const pctStr = pct != null ? fmtPct(pct) : '···';
+    const bw = pct != null ? (Math.abs(pct) / maxAbs * 100) : 0;
+    const price = perfData[theme.id]?.prices?.[sym];
+    const priceStr = price != null ? `$${price.toFixed(price >= 100 ? 2 : 3)}` : '—';
+
+    html += `
+      <a class="holding-row" href="${tvLink(sym)}" target="_blank" rel="noopener">
+        <div class="holding-rank">#${i + 1}</div>
+        <div class="holding-info">
+          <div class="holding-ticker">${sym}</div>
+          <div class="holding-bar"><div class="holding-bar-fill ${cls}" style="width:${bw}%"></div></div>
+        </div>
+        <div class="holding-price">${priceStr}</div>
+        <div class="holding-pct ${cls}">${pctStr}</div>
+      </a>`;
+  });
+
+  table.innerHTML = html;
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('open');
+  currentModalTheme = null;
+}
+
+document.getElementById('closeModal').addEventListener('click', closeModal);
+document.getElementById('modalOverlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('modalOverlay')) closeModal();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ─── DATA LOADING ─────────────────────────────────────────────────────────────
+
+const TF_RANGE = { '1D': null, '5D': '5d', '1M': '1mo', 'YTD': 'ytd' };
+
+async function loadTheme(theme) {
+  const allSymbols = [theme.etf, ...theme.holdings];
+
+  try {
+    if (currentTf === '1D') {
+      // Use v7 quote for 1-day change
+      const quotes = await fetchQuotes(allSymbols);
+
+      if (!perfData[theme.id]) perfData[theme.id] = { etf: null, holdings: {}, prices: {} };
+      const d = perfData[theme.id];
+
+      d.etf = quotes[theme.etf]?.changePercent ?? null;
+      for (const sym of theme.holdings) {
+        d.holdings[sym] = quotes[sym]?.changePercent ?? null;
+        d.prices[sym] = quotes[sym]?.price ?? null;
+      }
+    } else {
+      // Historical range
+      const range = TF_RANGE[currentTf];
+      if (!perfData[theme.id]) perfData[theme.id] = { etf: null, holdings: {}, prices: {} };
+      const d = perfData[theme.id];
+
+      // Fetch ETF history
+      const etfCloses = await fetchHistory(theme.etf, range);
+      d.etf = calcChangeFromHistory(etfCloses);
+
+      // Fetch each holding (staggered to avoid rate limits)
+      for (let i = 0; i < theme.holdings.length; i++) {
+        const sym = theme.holdings[i];
+        try {
+          if (i > 0) await sleep(120);
+          const closes = await fetchHistory(sym, range);
+          d.holdings[sym] = calcChangeFromHistory(closes);
+        } catch {
+          d.holdings[sym] = null;
+        }
+        // Re-render modal if open
+        if (currentModalTheme?.id === theme.id) renderHoldings(theme);
+      }
+    }
+  } catch (e) {
+    if (!perfData[theme.id]) perfData[theme.id] = { etf: null, holdings: {}, prices: {} };
+    perfData[theme.id].etf = null;
+    console.warn(`Failed to load ${theme.id}:`, e.message);
+  }
+
+  loadedCount++;
+  updateStatusBar();
+  renderGrid();
+  if (currentModalTheme?.id === theme.id) renderHoldings(theme);
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function loadAll() {
+  loadedCount = 0;
+  updateStatusBar();
+  renderGrid();
+
+  const btn = document.getElementById('refreshBtn');
+  btn.classList.add('loading');
+
+  // For 1D, batch all symbols into one quote call per theme (faster)
+  // Load themes in parallel batches of 4
+  const batchSize = currentTf === '1D' ? 8 : 2;
+
+  for (let i = 0; i < THEMES.length; i += batchSize) {
+    const batch = THEMES.slice(i, i + batchSize);
+    await Promise.all(batch.map(t => loadTheme(t)));
+    if (currentTf !== '1D') await sleep(300);
+  }
+
+  btn.classList.remove('loading');
+  document.getElementById('lastUpdate').textContent =
+    'UPDATED ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+// ─── TIMEFRAME TABS ───────────────────────────────────────────────────────────
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    currentTf = tab.dataset.tf;
+    // Clear data for new timeframe
+    for (const key of Object.keys(perfData)) delete perfData[key];
+    loadAll();
+  });
+});
+
+document.getElementById('refreshBtn').addEventListener('click', () => {
+  for (const key of Object.keys(perfData)) delete perfData[key];
+  loadAll();
+});
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+
+renderGrid(); // skeleton render
+loadAll();
+
+</script>
+</body>
+</html>
