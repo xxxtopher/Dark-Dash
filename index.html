@@ -788,15 +788,16 @@ async function fetchWithProxy(url) {
 const YF_BASE = 'https://query2.finance.yahoo.com';
 
 async function fetchQuote1D(symbol) {
-  // Use v8 chart with range=1d interval=1m to get today's open vs latest close
   const url = `${YF_BASE}/v8/finance/chart/${symbol}?range=1d&interval=5m`;
   const data = await fetchWithProxy(url);
-  const result = data?.chart?.result?.[0];
-  if (!result) return { changePercent: null, price: null };
-  const meta = result.meta;
-  // Yahoo provides regularMarketChangePercent directly in meta
-  const changePercent = meta?.regularMarketChangePercent ?? null;
-  const price = meta?.regularMarketPrice ?? null;
+  const meta = data?.chart?.result?.[0]?.meta;
+  if (!meta) return { changePercent: null, price: null };
+  const price = meta.regularMarketPrice ?? null;
+  // chartPreviousClose is the prior day's close — use it to compute 1D change
+  const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? null;
+  const changePercent = (price != null && prevClose != null && prevClose !== 0)
+    ? ((price - prevClose) / prevClose) * 100
+    : null;
   return { changePercent, price };
 }
 
