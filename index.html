@@ -787,20 +787,17 @@ async function fetchWithProxy(url) {
 
 const YF_BASE = 'https://query2.finance.yahoo.com';
 
-async function fetchQuotes(symbols) {
-  const url = `${YF_BASE}/v7/finance/quote?symbols=${symbols.join(',')}&fields=regularMarketPrice,regularMarketChangePercent,regularMarketPreviousClose,shortName,longName`;
+async function fetchQuote1D(symbol) {
+  // Use v8 chart with range=1d interval=1m to get today's open vs latest close
+  const url = `${YF_BASE}/v8/finance/chart/${symbol}?range=1d&interval=5m`;
   const data = await fetchWithProxy(url);
-  const result = {};
-  const quotes = data?.quoteResponse?.result || [];
-  for (const q of quotes) {
-    result[q.symbol] = {
-      price: q.regularMarketPrice,
-      changePercent: q.regularMarketChangePercent,
-      prevClose: q.regularMarketPreviousClose,
-      name: q.shortName || q.longName || q.symbol,
-    };
-  }
-  return result;
+  const result = data?.chart?.result?.[0];
+  if (!result) return { changePercent: null, price: null };
+  const meta = result.meta;
+  // Yahoo provides regularMarketChangePercent directly in meta
+  const changePercent = meta?.regularMarketChangePercent ?? null;
+  const price = meta?.regularMarketPrice ?? null;
+  return { changePercent, price };
 }
 
 async function fetchHistory(symbol, range) {
@@ -996,48 +993,52 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
 const TF_RANGE = { '1D': null, '5D': '5d', '1M': '1mo', 'YTD': 'ytd' };
 
 async function loadTheme(theme) {
+  if (!perfData[theme.id]) perfData[theme.id] = { etf: null, holdings: {}, prices: {} };
+  const d = perfData[theme.id];
   const allSymbols = [theme.etf, ...theme.holdings];
 
   try {
     if (currentTf === '1D') {
-      // Use v7 quote for 1-day change
-      const quotes = await fetchQuotes(allSymbols);
-
-      if (!perfData[theme.id]) perfData[theme.id] = { etf: null, holdings: {}, prices: {} };
-      const d = perfData[theme.id];
-
-      d.etf = quotes[theme.etf]?.changePercent ?? null;
-      for (const sym of theme.holdings) {
-        d.holdings[sym] = quotes[sym]?.changePercent ?? null;
-        d.prices[sym] = quotes[sym]?.price ?? null;
+      // Fetch each symbol via v8 chart (range=1d) — meta contains regularMarketChangePercent
+      for (let i = 0; i < allSymbols.length; i++) {
+        const sym = allSymbols[i];
+        try {
+          if (i > 0) await sleep(150);
+          const r = await fetchQuote1D(sym);
+          if (sym === theme.etf) {
+            d.etf = r.changePercent;
+          } else {
+            d.holdings[sym] = r.changePercent;
+            d.prices[sym] = r.price;
+          }
+        } catch {
+          if (sym === theme.etf) d.etf = null;
+          else d.holdings[sym] = null;
+        }
+        renderGrid();
+        if (currentModalTheme?.id === theme.id) renderHoldings(theme);
       }
     } else {
       // Historical range
       const range = TF_RANGE[currentTf];
-      if (!perfData[theme.id]) perfData[theme.id] = { etf: null, holdings: {}, prices: {} };
-      const d = perfData[theme.id];
-
-      // Fetch ETF history
       const etfCloses = await fetchHistory(theme.etf, range);
       d.etf = calcChangeFromHistory(etfCloses);
+      renderGrid();
 
-      // Fetch each holding (staggered to avoid rate limits)
       for (let i = 0; i < theme.holdings.length; i++) {
         const sym = theme.holdings[i];
         try {
-          if (i > 0) await sleep(120);
+          if (i > 0) await sleep(150);
           const closes = await fetchHistory(sym, range);
           d.holdings[sym] = calcChangeFromHistory(closes);
         } catch {
           d.holdings[sym] = null;
         }
-        // Re-render modal if open
         if (currentModalTheme?.id === theme.id) renderHoldings(theme);
       }
     }
   } catch (e) {
-    if (!perfData[theme.id]) perfData[theme.id] = { etf: null, holdings: {}, prices: {} };
-    perfData[theme.id].etf = null;
+    d.etf = null;
     console.warn(`Failed to load ${theme.id}:`, e.message);
   }
 
