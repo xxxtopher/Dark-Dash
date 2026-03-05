@@ -1272,31 +1272,45 @@ function renderBreadth() {
   `;
 }
 
-async function fetchBreadthIndicator(symbol) {
-  // Fetch latest price value for a breadth index symbol via v8 chart
+async function fetchStooq(symbol) {
+  // Stooq CSV API: returns CSV with header row + data rows, latest date last
+  // URL: https://stooq.com/q/d/l/?s=SYMBOL&i=d (daily, most recent ~5 rows)
   try {
-    const url = `${YF_BASE}/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1d`;
-    const data = await fetchWithProxy(url);
-    const meta = data?.chart?.result?.[0]?.meta;
-    return meta?.regularMarketPrice ?? null;
+    const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(symbol)}&i=d`;
+    const proxied = PROXIES[activeProxy](url);
+    const res = await fetch(proxied, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    // CSV format: Date,Open,High,Low,Close,Volume
+    const lines = text.trim().split('\n').filter(l => l && !l.startsWith('Date'));
+    if (!lines.length) return null;
+    const last = lines[lines.length - 1].split(',');
+    const close = parseFloat(last[4]); // Close column
+    return isNaN(close) ? null : close;
   } catch { return null; }
 }
 
 async function loadBreadth() {
   renderBreadth(); // show loading state
 
-  // Fetch in parallel
-  const [s5fi, s5th, nyhgh, nylow, nahgh, nalow] = await Promise.allSettled([
-    fetchBreadthIndicator('%5ES5FI'),   // S5FI — % above 50-day MA
-    fetchBreadthIndicator('%5ES5TH'),   // S5TH — % above 200-day MA
-    fetchBreadthIndicator('%5ENYHGH'),  // NYSE new 52-week highs
-    fetchBreadthIndicator('%5ENYLOW'),  // NYSE new 52-week lows
-    fetchBreadthIndicator('%5ENAHGH'),  // NASDAQ new 52-week highs
-    fetchBreadthIndicator('%5ENALOW'),  // NASDAQ new 52-week lows
+  // Stooq symbols:
+  // $spxa50r  = % of S&P 500 stocks above 50-day MA
+  // $spxa200r = % of S&P 500 stocks above 200-day MA
+  // $nyhgh    = NYSE 52-week new highs
+  // $nylow    = NYSE 52-week new lows
+  // $nahgh    = NASDAQ 52-week new highs
+  // $nalow    = NASDAQ 52-week new lows
+  const [a50, a200, nyhgh, nylow, nahgh, nalow] = await Promise.allSettled([
+    fetchStooq('$spxa50r'),
+    fetchStooq('$spxa200r'),
+    fetchStooq('$nyhgh'),
+    fetchStooq('$nylow'),
+    fetchStooq('$nahgh'),
+    fetchStooq('$nalow'),
   ]);
 
-  breadthState.above50  = s5fi.status  === 'fulfilled' ? s5fi.value  : null;
-  breadthState.above200 = s5th.status  === 'fulfilled' ? s5th.value  : null;
+  breadthState.above50  = a50.status   === 'fulfilled' ? a50.value   : null;
+  breadthState.above200 = a200.status  === 'fulfilled' ? a200.value  : null;
 
   const h1 = nyhgh.status === 'fulfilled' ? nyhgh.value : null;
   const h2 = nahgh.status === 'fulfilled' ? nahgh.value : null;
