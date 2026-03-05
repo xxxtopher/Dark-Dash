@@ -697,7 +697,7 @@
 
 <!-- MARKET BREADTH PANEL -->
 <div class="breadth-panel">
-  <div class="breadth-label">▸ Market Breadth — S&amp;P 500</div>
+  <div class="breadth-label">▸ Market Breadth — Theme Holdings (~120 stocks)</div>
   <div class="breadth-grid" id="breadthGrid">
     <!-- rendered by JS -->
     <div class="breadth-card"><div class="breadth-card-title">Advance / Decline</div><div class="breadth-value loading">···</div></div>
@@ -1240,90 +1240,111 @@ function renderBreadth() {
 
     <!-- 2. % Above 50-Day MA -->
     <div class="breadth-card">
-      <div class="breadth-card-title">% Above 50-Day MA<br><span style="color:var(--text3);font-size:8px">(S&amp;P 500)</span></div>
+      <div class="breadth-card-title">% Above 50-Day MA<br><span style="color:var(--text3);font-size:8px">(theme holdings)</span></div>
       <div class="breadth-value ${a50cls}">${above50 != null ? above50.toFixed(1) + '%' : '···'}</div>
       <div class="gauge-track"><div class="gauge-fill ${above50 != null ? gaugeColor(above50) : ''}" style="width:${above50 ?? 0}%"></div></div>
       <div class="gauge-zones"><span>0</span><span style="color:var(--gold)">50</span><span>100</span></div>
-      <div class="breadth-sub">${above50 != null ? (above50 >= 70 ? 'Overbought' : above50 >= 50 ? 'Bullish' : above50 >= 30 ? 'Bearish' : 'Oversold') : ''}</div>
+      <div class="breadth-sub">${above50 != null ? (above50 >= 70 ? 'Overbought' : above50 >= 50 ? 'Bullish' : above50 >= 30 ? 'Bearish' : 'Oversold') : 'computing···'}</div>
     </div>
 
     <!-- 3. % Above 200-Day MA -->
     <div class="breadth-card">
-      <div class="breadth-card-title">% Above 200-Day MA<br><span style="color:var(--text3);font-size:8px">(S&amp;P 500)</span></div>
+      <div class="breadth-card-title">% Above 200-Day MA<br><span style="color:var(--text3);font-size:8px">(theme holdings)</span></div>
       <div class="breadth-value ${a200cls}">${above200 != null ? above200.toFixed(1) + '%' : '···'}</div>
       <div class="gauge-track"><div class="gauge-fill ${above200 != null ? gaugeColor(above200) : ''}" style="width:${above200 ?? 0}%"></div></div>
       <div class="gauge-zones"><span>0</span><span style="color:var(--gold)">50</span><span>100</span></div>
-      <div class="breadth-sub">${above200 != null ? (above200 >= 70 ? 'Long-term strong' : above200 >= 50 ? 'Majority in uptrend' : above200 >= 30 ? 'Majority in downtrend' : 'Long-term weak') : ''}</div>
+      <div class="breadth-sub">${above200 != null ? (above200 >= 70 ? 'Long-term strong' : above200 >= 50 ? 'Majority in uptrend' : above200 >= 30 ? 'Majority in downtrend' : 'Long-term weak') : 'computing···'}</div>
     </div>
 
     <!-- 4. 52-Week Highs -->
     <div class="breadth-card">
-      <div class="breadth-card-title">52-Week Highs<br><span style="color:var(--text3);font-size:8px">(NYSE + NASDAQ)</span></div>
+      <div class="breadth-card-title">52-Week Highs<br><span style="color:var(--text3);font-size:8px">(theme holdings)</span></div>
       <div class="breadth-value ${highcls}">${highs ?? '···'}</div>
-      <div class="breadth-sub">${highs != null ? 'stocks hitting new highs' : ''}</div>
+      <div class="breadth-sub">${highs != null ? 'near 52-week high' : 'computing···'}</div>
     </div>
 
     <!-- 5. 52-Week Lows -->
     <div class="breadth-card">
-      <div class="breadth-card-title">52-Week Lows<br><span style="color:var(--text3);font-size:8px">(NYSE + NASDAQ)</span></div>
+      <div class="breadth-card-title">52-Week Lows<br><span style="color:var(--text3);font-size:8px">(theme holdings)</span></div>
       <div class="breadth-value ${lowcls}">${lows ?? '···'}</div>
-      <div class="breadth-sub">${lows != null ? 'stocks hitting new lows' : ''}</div>
+      <div class="breadth-sub">${lows != null ? 'near 52-week low' : 'computing···'}</div>
     </div>
   `;
 }
 
-async function fetchStooq(symbol) {
-  // Stooq CSV API: returns CSV with header row + data rows, latest date last
-  // URL: https://stooq.com/q/d/l/?s=SYMBOL&i=d (daily, most recent ~5 rows)
+// ─── BREADTH (computed from theme holdings) ───────────────────────────────────
+
+// Cache for 1y history keyed by symbol — shared across breadth computation
+const holdingHistory = {}; // { [sym]: { closes: [], loaded: bool } }
+
+// Collect all unique holding symbols across all themes
+const ALL_HOLDING_SYMS = [...new Set(THEMES.flatMap(t => t.holdings))];
+
+function computeMA(closes, period) {
+  if (closes.length < period) return null;
+  const slice = closes.slice(-period);
+  return slice.reduce((a, b) => a + b, 0) / period;
+}
+
+async function fetchHoldingHistory(symbol) {
+  if (holdingHistory[symbol]?.loaded) return holdingHistory[symbol].closes;
   try {
-    const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(symbol)}&i=d`;
-    const proxied = PROXIES[activeProxy](url);
-    const res = await fetch(proxied, { signal: AbortSignal.timeout(8000) });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
-    // CSV format: Date,Open,High,Low,Close,Volume
-    const lines = text.trim().split('\n').filter(l => l && !l.startsWith('Date'));
-    if (!lines.length) return null;
-    const last = lines[lines.length - 1].split(',');
-    const close = parseFloat(last[4]); // Close column
-    return isNaN(close) ? null : close;
-  } catch { return null; }
+    const url = `${YF_BASE}/v8/finance/chart/${symbol}?range=1y&interval=1d`;
+    const data = await fetchWithProxy(url);
+    const closes = (data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? []).filter(v => v != null);
+    holdingHistory[symbol] = { closes, loaded: true };
+    return closes;
+  } catch {
+    holdingHistory[symbol] = { closes: [], loaded: true };
+    return [];
+  }
+}
+
+function recomputeBreadthFromCache() {
+  let above50 = 0, above200 = 0, highs = 0, lows = 0, total = 0;
+  for (const sym of ALL_HOLDING_SYMS) {
+    const closes = holdingHistory[sym]?.closes ?? [];
+    if (closes.length < 20) continue;
+    total++;
+    const price  = closes[closes.length - 1];
+    const ma50   = computeMA(closes, 50);
+    const ma200  = computeMA(closes, 200);
+    const high52 = Math.max(...closes.slice(-252));
+    const low52  = Math.min(...closes.slice(-252));
+    if (ma50  != null && price > ma50)  above50++;
+    if (ma200 != null && price > ma200) above200++;
+    if (price >= high52 * 0.99) highs++;
+    if (price <= low52  * 1.01) lows++;
+  }
+  if (total > 0) {
+    breadthState.above50  = parseFloat((above50  / total * 100).toFixed(1));
+    breadthState.above200 = parseFloat((above200 / total * 100).toFixed(1));
+    breadthState.highs    = highs;
+    breadthState.lows     = lows;
+    renderBreadth();
+  }
 }
 
 async function loadBreadth() {
-  renderBreadth(); // show loading state
-
-  // Stooq symbols:
-  // $spxa50r  = % of S&P 500 stocks above 50-day MA
-  // $spxa200r = % of S&P 500 stocks above 200-day MA
-  // $nyhgh    = NYSE 52-week new highs
-  // $nylow    = NYSE 52-week new lows
-  // $nahgh    = NASDAQ 52-week new highs
-  // $nalow    = NASDAQ 52-week new lows
-  const [a50, a200, nyhgh, nylow, nahgh, nalow] = await Promise.allSettled([
-    fetchStooq('$spxa50r'),
-    fetchStooq('$spxa200r'),
-    fetchStooq('$nyhgh'),
-    fetchStooq('$nylow'),
-    fetchStooq('$nahgh'),
-    fetchStooq('$nalow'),
-  ]);
-
-  breadthState.above50  = a50.status   === 'fulfilled' ? a50.value   : null;
-  breadthState.above200 = a200.status  === 'fulfilled' ? a200.value  : null;
-
-  const h1 = nyhgh.status === 'fulfilled' ? nyhgh.value : null;
-  const h2 = nahgh.status === 'fulfilled' ? nahgh.value : null;
-  const l1 = nylow.status === 'fulfilled' ? nylow.value : null;
-  const l2 = nalow.status === 'fulfilled' ? nalow.value : null;
-
-  breadthState.highs = (h1 != null || h2 != null) ? Math.round((h1 ?? 0) + (h2 ?? 0)) : null;
-  breadthState.lows  = (l1 != null || l2 != null) ? Math.round((l1 ?? 0) + (l2 ?? 0)) : null;
-
+  breadthState.above50  = null;
+  breadthState.above200 = null;
+  breadthState.highs    = null;
+  breadthState.lows     = null;
+  // Reset history cache on refresh
+  for (const k of Object.keys(holdingHistory)) delete holdingHistory[k];
   renderBreadth();
+
+  // Fetch 1y history for all holdings in batches, compute progressively
+  const BATCH = 5;
+  for (let i = 0; i < ALL_HOLDING_SYMS.length; i += BATCH) {
+    const batch = ALL_HOLDING_SYMS.slice(i, i + BATCH);
+    await Promise.all(batch.map(sym => fetchHoldingHistory(sym)));
+    recomputeBreadthFromCache();
+    await sleep(150);
+  }
 }
 
-// Update advance/decline from loaded theme holdings
+// Update advance/decline from loaded theme holdings (uses already-fetched changePercent)
 function updateBreadthAdLine() {
   let up = 0, down = 0;
   for (const theme of THEMES) {
@@ -1340,6 +1361,7 @@ function updateBreadthAdLine() {
     renderBreadth();
   }
 }
+
 
 // ─── TIMEFRAME TABS ───────────────────────────────────────────────────────────
 
