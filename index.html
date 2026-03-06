@@ -1103,15 +1103,18 @@ function openModal(themeId) {
 function renderHoldings(theme) {
   const table = document.getElementById('holdingsTable');
   const holdingsData = perfData[theme.id]?.holdings || {};
+  const etfPct = perfData[theme.id]?.etf ?? null;
 
-  // Sort by absolute pct change (loading ones go to bottom)
+  // Sort direction mirrors ETF: if ETF is down, worst performers first; if up, best first
+  const etfDown = etfPct != null && etfPct < 0;
+
   const sorted = [...theme.holdings]
     .map(sym => ({ sym, pct: holdingsData[sym] ?? null }))
     .sort((a, b) => {
       if (a.pct == null && b.pct == null) return 0;
       if (a.pct == null) return 1;
       if (b.pct == null) return -1;
-      return b.pct - a.pct; // highest first (best performers at top)
+      return etfDown ? a.pct - b.pct : b.pct - a.pct; // down: worst first; up: best first
     });
 
   const maxAbs = Math.max(...sorted.filter(x => x.pct != null).map(x => Math.abs(x.pct)), 1);
