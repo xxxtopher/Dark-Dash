@@ -1154,51 +1154,71 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
 
 const TF_RANGE = { '1D': null, '5D': '5d', '1M': '1mo', 'YTD': 'ytd' };
 
+// Fetch up to 100 symbols in ONE call via v7 quote API
+async function fetchBatchQuotes(symbols) {
+  const url = `${YF_BASE}/v7/finance/quote?symbols=${symbols.join(',')}`;
+  try {
+    const data = await fetchWithProxy(url);
+    const result = {};
+    for (const q of data?.quoteResponse?.result ?? []) {
+      const price    = q.regularMarketPrice ?? null;
+      const prevClose = q.regularMarketPreviousClose ?? null;
+      result[q.symbol] = {
+        changePercent: (price != null && prevClose != null && prevClose !== 0)
+          ? ((price - prevClose) / prevClose) * 100
+          : (q.regularMarketChangePercent ?? null),
+        price,
+      };
+    }
+    return result;
+  } catch { return {}; }
+}
+
+async function loadAll1D() {
+  // Collect ALL symbols across all themes in one go
+  const allSymbols = [...new Set(THEMES.flatMap(t => [t.etf, ...t.holdings]))];
+
+  // Split into chunks of 80 (safe limit) and fetch in parallel
+  const CHUNK = 80;
+  const chunks = [];
+  for (let i = 0; i < allSymbols.length; i += CHUNK) chunks.push(allSymbols.slice(i, i + CHUNK));
+
+  const results = await Promise.all(chunks.map(c => fetchBatchQuotes(c)));
+  const combined = Object.assign({}, ...results);
+
+  // Distribute results into perfData
+  for (const theme of THEMES) {
+    if (!perfData[theme.id]) perfData[theme.id] = { etf: null, holdings: {}, prices: {} };
+    const d = perfData[theme.id];
+    const etfQ = combined[theme.etf];
+    d.etf = etfQ?.changePercent ?? null;
+    for (const sym of theme.holdings) {
+      d.holdings[sym] = combined[sym]?.changePercent ?? null;
+      d.prices[sym]   = combined[sym]?.price ?? null;
+    }
+    loadedCount++;
+  }
+  updateStatusBar();
+  renderGrid();
+  updateBreadthAdLine();
+}
+
 async function loadTheme(theme) {
   if (!perfData[theme.id]) perfData[theme.id] = { etf: null, holdings: {}, prices: {} };
   const d = perfData[theme.id];
-  const allSymbols = [theme.etf, ...theme.holdings];
 
   try {
-    if (currentTf === '1D') {
-      // Fetch each symbol via v8 chart (range=1d) — meta contains regularMarketChangePercent
-      for (let i = 0; i < allSymbols.length; i++) {
-        const sym = allSymbols[i];
-        try {
-          if (i > 0) await sleep(150);
-          const r = await fetchQuote1D(sym);
-          if (sym === theme.etf) {
-            d.etf = r.changePercent;
-          } else {
-            d.holdings[sym] = r.changePercent;
-            d.prices[sym] = r.price;
-          }
-        } catch {
-          if (sym === theme.etf) d.etf = null;
-          else d.holdings[sym] = null;
-        }
-        renderGrid();
-        if (currentModalTheme?.id === theme.id) renderHoldings(theme);
-      }
-    } else {
-      // Historical range
-      const range = TF_RANGE[currentTf];
-      const etfCloses = await fetchHistory(theme.etf, range);
-      d.etf = calcChangeFromHistory(etfCloses);
-      renderGrid();
+    // Historical range — fetch ETF + all holdings in parallel (no sleep)
+    const range = TF_RANGE[currentTf];
+    const allSymbols = [theme.etf, ...theme.holdings];
+    const results = await Promise.all(allSymbols.map(sym => fetchHistory(sym, range).catch(() => [])));
 
-      for (let i = 0; i < theme.holdings.length; i++) {
-        const sym = theme.holdings[i];
-        try {
-          if (i > 0) await sleep(150);
-          const closes = await fetchHistory(sym, range);
-          d.holdings[sym] = calcChangeFromHistory(closes);
-        } catch {
-          d.holdings[sym] = null;
-        }
-        if (currentModalTheme?.id === theme.id) renderHoldings(theme);
-      }
-    }
+    results.forEach((closes, i) => {
+      const sym = allSymbols[i];
+      const pct = calcChangeFromHistory(closes);
+      if (sym === theme.etf) d.etf = pct;
+      else d.holdings[sym] = pct;
+    });
   } catch (e) {
     d.etf = null;
     console.warn(`Failed to load ${theme.id}:`, e.message);
@@ -1221,14 +1241,16 @@ async function loadAll() {
   const btn = document.getElementById('refreshBtn');
   btn.classList.add('loading');
 
-  // For 1D, batch all symbols into one quote call per theme (faster)
-  // Load themes in parallel batches of 4
-  const batchSize = currentTf === '1D' ? 8 : 2;
-
-  for (let i = 0; i < THEMES.length; i += batchSize) {
-    const batch = THEMES.slice(i, i + batchSize);
-    await Promise.all(batch.map(t => loadTheme(t)));
-    if (currentTf !== '1D') await sleep(300);
+  if (currentTf === '1D') {
+    // Single batched call for all symbols — very fast
+    await loadAll1D();
+  } else {
+    // Historical: load all themes in parallel, 4 at a time
+    const BATCH = 4;
+    for (let i = 0; i < THEMES.length; i += BATCH) {
+      const batch = THEMES.slice(i, i + BATCH);
+      await Promise.all(batch.map(t => loadTheme(t)));
+    }
   }
 
   btn.classList.remove('loading');
