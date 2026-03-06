@@ -1154,50 +1154,40 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
 
 const TF_RANGE = { '1D': null, '5D': '5d', '1M': '1mo', 'YTD': 'ytd' };
 
-// Fetch up to 100 symbols in ONE call via v7 quote API
-async function fetchBatchQuotes(symbols) {
-  const url = `${YF_BASE}/v7/finance/quote?symbols=${symbols.join(',')}`;
-  try {
-    const data = await fetchWithProxy(url);
-    const result = {};
-    for (const q of data?.quoteResponse?.result ?? []) {
-      const price    = q.regularMarketPrice ?? null;
-      const prevClose = q.regularMarketPreviousClose ?? null;
-      result[q.symbol] = {
-        changePercent: (price != null && prevClose != null && prevClose !== 0)
-          ? ((price - prevClose) / prevClose) * 100
-          : (q.regularMarketChangePercent ?? null),
-        price,
-      };
-    }
-    return result;
-  } catch { return {}; }
+async function loadAll1D() {
+  // Collect all unique symbols across all themes
+  const allSymbols = [...new Set(THEMES.flatMap(t => [t.etf, ...t.holdings]))];
+  const combined = {};
+
+  // Fetch all symbols in parallel batches of 20 (no sleeps)
+  const BATCH = 20;
+  for (let i = 0; i < allSymbols.length; i += BATCH) {
+    const batch = allSymbols.slice(i, i + BATCH);
+    await Promise.all(batch.map(async sym => {
+      try {
+        const r = await fetchQuote1D(sym);
+        combined[sym] = r;
+      } catch { combined[sym] = { changePercent: null, price: null }; }
+    }));
+    // Distribute what we have so far — progressive rendering
+    applyQuotesToThemes(combined);
+  }
 }
 
-async function loadAll1D() {
-  // Collect ALL symbols across all themes in one go
-  const allSymbols = [...new Set(THEMES.flatMap(t => [t.etf, ...t.holdings]))];
-
-  // Split into chunks of 80 (safe limit) and fetch in parallel
-  const CHUNK = 80;
-  const chunks = [];
-  for (let i = 0; i < allSymbols.length; i += CHUNK) chunks.push(allSymbols.slice(i, i + CHUNK));
-
-  const results = await Promise.all(chunks.map(c => fetchBatchQuotes(c)));
-  const combined = Object.assign({}, ...results);
-
-  // Distribute results into perfData
+function applyQuotesToThemes(combined) {
   for (const theme of THEMES) {
     if (!perfData[theme.id]) perfData[theme.id] = { etf: null, holdings: {}, prices: {} };
     const d = perfData[theme.id];
-    const etfQ = combined[theme.etf];
-    d.etf = etfQ?.changePercent ?? null;
+    if (combined[theme.etf] !== undefined) d.etf = combined[theme.etf]?.changePercent ?? null;
     for (const sym of theme.holdings) {
-      d.holdings[sym] = combined[sym]?.changePercent ?? null;
-      d.prices[sym]   = combined[sym]?.price ?? null;
+      if (combined[sym] !== undefined) {
+        d.holdings[sym] = combined[sym]?.changePercent ?? null;
+        d.prices[sym]   = combined[sym]?.price ?? null;
+      }
     }
-    loadedCount++;
   }
+  // Recount loaded themes (those with etf data)
+  loadedCount = THEMES.filter(t => perfData[t.id]?.etf !== undefined && perfData[t.id]?.etf !== null).length;
   updateStatusBar();
   renderGrid();
   updateBreadthAdLine();
@@ -1242,7 +1232,6 @@ async function loadAll() {
   btn.classList.add('loading');
 
   if (currentTf === '1D') {
-    // Single batched call for all symbols — very fast
     await loadAll1D();
   } else {
     // Historical: load all themes in parallel, 4 at a time
