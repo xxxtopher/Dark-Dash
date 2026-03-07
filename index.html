@@ -964,20 +964,6 @@ async function fetchWithProxy(url) {
 
 const YF_BASE = 'https://query2.finance.yahoo.com';
 
-async function fetchQuote1D(symbol) {
-  const url = `${YF_BASE}/v8/finance/chart/${symbol}?range=1d&interval=5m`;
-  const data = await fetchWithProxy(url);
-  const meta = data?.chart?.result?.[0]?.meta;
-  if (!meta) return { changePercent: null, price: null };
-  const price = meta.regularMarketPrice ?? null;
-  // chartPreviousClose is the prior day's close — use it to compute 1D change
-  const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? null;
-  const changePercent = (price != null && prevClose != null && prevClose !== 0)
-    ? ((price - prevClose) / prevClose) * 100
-    : null;
-  return { changePercent, price };
-}
-
 async function fetchHistory(symbol, range) {
   // range: '5d', '1mo', 'ytd'
   const url = `${YF_BASE}/v8/finance/chart/${symbol}?range=${range}&interval=1d`;
@@ -1178,19 +1164,25 @@ async function loadAll1D() {
   const allSymbols = [...new Set(THEMES.flatMap(t => [t.etf, ...t.holdings]))];
   const combined = {};
 
-  // Fetch all symbols in parallel batches of 20 (no sleeps)
-  const BATCH = 20;
-  for (let i = 0; i < allSymbols.length; i += BATCH) {
-    const batch = allSymbols.slice(i, i + BATCH);
-    await Promise.all(batch.map(async sym => {
-      try {
-        const r = await fetchQuote1D(sym);
-        combined[sym] = r;
-      } catch { combined[sym] = { changePercent: null, price: null }; }
-    }));
-    // Distribute what we have so far — progressive rendering
-    applyQuotesToThemes(combined);
-  }
+  // Fire ALL requests concurrently — no batching, no sleeps
+  // Use interval=1d (tiny response) instead of 5m
+  await Promise.all(allSymbols.map(async sym => {
+    try {
+      const url = `${YF_BASE}/v8/finance/chart/${sym}?range=1d&interval=1d`;
+      const data = await fetchWithProxy(url);
+      const meta = data?.chart?.result?.[0]?.meta;
+      if (!meta) { combined[sym] = { changePercent: null, price: null }; return; }
+      const price     = meta.regularMarketPrice ?? null;
+      const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? null;
+      combined[sym] = {
+        changePercent: (price != null && prevClose != null && prevClose !== 0)
+          ? ((price - prevClose) / prevClose) * 100 : null,
+        price,
+      };
+    } catch { combined[sym] = { changePercent: null, price: null }; }
+  }));
+
+  applyQuotesToThemes(combined);
 }
 
 function applyQuotesToThemes(combined) {
@@ -1205,39 +1197,41 @@ function applyQuotesToThemes(combined) {
       }
     }
   }
-  // Recount loaded themes (those with etf data)
-  loadedCount = THEMES.filter(t => perfData[t.id]?.etf !== undefined && perfData[t.id]?.etf !== null).length;
+  loadedCount = THEMES.filter(t => perfData[t.id]?.etf != null).length;
   updateStatusBar();
   renderGrid();
   updateBreadthAdLine();
 }
 
-async function loadTheme(theme) {
-  if (!perfData[theme.id]) perfData[theme.id] = { etf: null, holdings: {}, prices: {} };
-  const d = perfData[theme.id];
+async function loadAllHistorical() {
+  const range = TF_RANGE[currentTf];
 
-  try {
-    // Historical range — fetch ETF + all holdings in parallel (no sleep)
-    const range = TF_RANGE[currentTf];
-    const allSymbols = [theme.etf, ...theme.holdings];
-    const results = await Promise.all(allSymbols.map(sym => fetchHistory(sym, range).catch(() => [])));
+  // Collect all unique symbols
+  const allSymbols = [...new Set(THEMES.flatMap(t => [t.etf, ...t.holdings]))];
+  const historyMap = {};
 
-    results.forEach((closes, i) => {
-      const sym = allSymbols[i];
-      const pct = calcChangeFromHistory(closes);
-      if (sym === theme.etf) d.etf = pct;
-      else d.holdings[sym] = pct;
-    });
-  } catch (e) {
-    d.etf = null;
-    console.warn(`Failed to load ${theme.id}:`, e.message);
+  // Fire ALL symbol requests concurrently
+  await Promise.all(allSymbols.map(async sym => {
+    try {
+      const closes = await fetchHistory(sym, range);
+      historyMap[sym] = calcChangeFromHistory(closes);
+    } catch { historyMap[sym] = null; }
+  }));
+
+  // Distribute into perfData
+  for (const theme of THEMES) {
+    if (!perfData[theme.id]) perfData[theme.id] = { etf: null, holdings: {}, prices: {} };
+    const d = perfData[theme.id];
+    d.etf = historyMap[theme.etf] ?? null;
+    for (const sym of theme.holdings) {
+      d.holdings[sym] = historyMap[sym] ?? null;
+    }
+    loadedCount++;
   }
-
-  loadedCount++;
   updateStatusBar();
   renderGrid();
   updateBreadthAdLine();
-  if (currentModalTheme?.id === theme.id) renderHoldings(theme);
+  if (currentModalTheme) renderHoldings(currentModalTheme);
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -1253,12 +1247,7 @@ async function loadAll() {
   if (currentTf === '1D') {
     await loadAll1D();
   } else {
-    // Historical: load all themes in parallel, 4 at a time
-    const BATCH = 4;
-    for (let i = 0; i < THEMES.length; i += BATCH) {
-      const batch = THEMES.slice(i, i + BATCH);
-      await Promise.all(batch.map(t => loadTheme(t)));
-    }
+    await loadAllHistorical();
   }
 
   btn.classList.remove('loading');
