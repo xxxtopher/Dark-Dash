@@ -553,6 +553,148 @@
   ::-webkit-scrollbar-track { background: var(--bg2); }
   ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 
+  /* Market Overview Section */
+  .market-overview {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 28px;
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 16px;
+    align-items: stretch;
+  }
+
+  .market-chart-card {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    min-height: 110px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .market-chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 8px;
+  }
+
+  .market-chart-title {
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+
+  .market-chart-price {
+    text-align: right;
+  }
+
+  .market-chart-value {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.3px;
+  }
+
+  .market-chart-pct {
+    font-size: 11px;
+    font-weight: 600;
+    margin-top: 1px;
+  }
+
+  .market-chart-pct.pos { color: var(--green); }
+  .market-chart-pct.neg { color: var(--red); }
+  .market-chart-pct.loading { color: var(--text3); animation: shimmer 1.5s infinite; }
+
+  .chart-canvas-wrap {
+    flex: 1;
+    position: relative;
+    min-height: 60px;
+  }
+
+  .chart-canvas-wrap canvas {
+    width: 100% !important;
+    height: 100% !important;
+    display: block;
+  }
+
+  /* Theme ranking table */
+  .theme-ranking {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    min-width: 220px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .ranking-title {
+    font-size: 9px;
+    color: var(--text3);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .ranking-section-label {
+    font-size: 8px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin: 6px 0 3px;
+    padding-bottom: 3px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .ranking-section-label.top { color: var(--green); }
+  .ranking-section-label.bot { color: var(--red); }
+
+  .ranking-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 3px 0;
+  }
+
+  .ranking-name {
+    font-size: 10px;
+    color: var(--text);
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 130px;
+  }
+
+  .ranking-pct {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+    flex-shrink: 0;
+  }
+
+  .ranking-pct.pos { color: var(--green); }
+  .ranking-pct.neg { color: var(--red); }
+  .ranking-pct.loading { color: var(--text3); font-size: 9px; animation: shimmer 1.5s infinite; }
+
+  .ranking-divider {
+    border: none;
+    border-top: 1px dashed var(--border);
+    margin: 4px 0;
+  }
+
+  @media (max-width: 900px) {
+    .market-overview { grid-template-columns: 1fr 1fr; }
+    .theme-ranking { display: none; }
+  }
+
+  @media (max-width: 600px) {
+    .market-overview { grid-template-columns: 1fr; padding: 12px 16px; }
+  }
+
   /* Breadth Panel */
   .breadth-panel {
     background: var(--bg2);
@@ -695,9 +837,55 @@
   </button>
 </div>
 
+<!-- MARKET OVERVIEW SECTION -->
+<div class="market-overview">
+  <!-- S&P 500 mini chart -->
+  <div class="market-chart-card">
+    <div class="market-chart-header">
+      <div class="market-chart-title">S&amp;P 500 · ^GSPC</div>
+      <div class="market-chart-price">
+        <div class="market-chart-value" id="spxPrice">···</div>
+        <div class="market-chart-pct loading" id="spxPct">···</div>
+      </div>
+    </div>
+    <div class="chart-canvas-wrap"><canvas id="spxChart"></canvas></div>
+  </div>
+
+  <!-- Nasdaq mini chart -->
+  <div class="market-chart-card">
+    <div class="market-chart-header">
+      <div class="market-chart-title">NASDAQ · ^IXIC</div>
+      <div class="market-chart-price">
+        <div class="market-chart-value" id="ndxPrice">···</div>
+        <div class="market-chart-pct loading" id="ndxPct">···</div>
+      </div>
+    </div>
+    <div class="chart-canvas-wrap"><canvas id="ndxChart"></canvas></div>
+  </div>
+
+  <!-- Theme ranking -->
+  <div class="theme-ranking">
+    <div class="ranking-title">▸ Theme Ranking · 1D</div>
+    <div id="themeRankingTable">
+      <div class="ranking-section-label top">▲ Top Performers</div>
+      <div class="ranking-row"><span class="ranking-name">—</span><span class="ranking-pct loading">···</span></div>
+      <div class="ranking-row"><span class="ranking-name">—</span><span class="ranking-pct loading">···</span></div>
+      <div class="ranking-row"><span class="ranking-name">—</span><span class="ranking-pct loading">···</span></div>
+      <hr class="ranking-divider">
+      <div class="ranking-section-label bot">▼ Bottom Performers</div>
+      <div class="ranking-row"><span class="ranking-name">—</span><span class="ranking-pct loading">···</span></div>
+      <div class="ranking-row"><span class="ranking-name">—</span><span class="ranking-pct loading">···</span></div>
+      <div class="ranking-row"><span class="ranking-name">—</span><span class="ranking-pct loading">···</span></div>
+    </div>
+  </div>
+</div>
+
 <!-- MARKET BREADTH PANEL -->
 <div class="breadth-panel">
-  <div class="breadth-label">▸ Market Breadth — Theme Holdings (~150 stocks)</div>
+  <div class="breadth-label" style="display:flex;justify-content:space-between;align-items:center">
+    <span>▸ Market Breadth — Theme Holdings (~150 stocks)</span>
+    <span id="breadthTimestamp" style="color:var(--text3);font-size:8px;letter-spacing:0.5px"></span>
+  </div>
   <div class="breadth-grid" id="breadthGrid">
     <!-- rendered by JS -->
     <div class="breadth-card"><div class="breadth-card-title">Advance / Decline</div><div class="breadth-value loading">···</div></div>
@@ -1201,6 +1389,7 @@ function applyQuotesToThemes(combined) {
   updateStatusBar();
   renderGrid();
   updateBreadthAdLine();
+  renderThemeRanking();
 }
 
 async function loadAllHistorical() {
@@ -1231,6 +1420,7 @@ async function loadAllHistorical() {
   updateStatusBar();
   renderGrid();
   updateBreadthAdLine();
+  renderThemeRanking();
   if (currentModalTheme) renderHoldings(currentModalTheme);
 }
 
@@ -1255,14 +1445,163 @@ async function loadAll() {
     'UPDATED ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+// ─── MARKET OVERVIEW ─────────────────────────────────────────────────────────
+
+async function fetchIndexIntraday(symbol) {
+  // Fetch today's 5-min intraday data
+  const url = `${YF_BASE}/v8/finance/chart/${symbol}?range=1d&interval=5m`;
+  const data = await fetchWithProxy(url);
+  const result = data?.chart?.result?.[0];
+  if (!result) return null;
+  const meta      = result.meta;
+  const closes    = result.indicators?.quote?.[0]?.close ?? [];
+  const timestamps = result.timestamp ?? [];
+  const price     = meta.regularMarketPrice ?? null;
+  const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? null;
+  const changePct = (price != null && prevClose != null && prevClose !== 0)
+    ? ((price - prevClose) / prevClose) * 100 : null;
+
+  // Filter nulls
+  const points = [];
+  for (let i = 0; i < closes.length; i++) {
+    if (closes[i] != null) points.push({ t: timestamps[i], v: closes[i] });
+  }
+  return { price, changePct, prevClose, points };
+}
+
+function drawMiniChart(canvasId, points, prevClose, isUp) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || !points.length) return;
+  const wrap = canvas.parentElement;
+  const W = wrap.clientWidth || 300;
+  const H = wrap.clientHeight || 60;
+  canvas.width  = W * window.devicePixelRatio;
+  canvas.height = H * window.devicePixelRatio;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+  const vals = points.map(p => p.v);
+  const minV = Math.min(...vals, prevClose ?? Infinity);
+  const maxV = Math.max(...vals, prevClose ?? -Infinity);
+  const range = maxV - minV || 1;
+
+  const toX = i => (i / (points.length - 1)) * W;
+  const toY = v => H - ((v - minV) / range) * (H * 0.85) - H * 0.05;
+
+  const color = isUp ? '#00e676' : '#ff4444';
+
+  // Draw prev close baseline
+  if (prevClose != null) {
+    const baseY = toY(prevClose);
+    ctx.beginPath();
+    ctx.setLineDash([3, 4]);
+    ctx.strokeStyle = 'rgba(100,130,150,0.4)';
+    ctx.lineWidth = 1;
+    ctx.moveTo(0, baseY);
+    ctx.lineTo(W, baseY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Fill gradient
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, isUp ? 'rgba(0,230,118,0.18)' : 'rgba(255,68,68,0.18)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+
+  ctx.beginPath();
+  points.forEach((p, i) => {
+    const x = toX(i), y = toY(p.v);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.lineTo(toX(points.length - 1), H);
+  ctx.lineTo(0, H);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Draw line
+  ctx.beginPath();
+  points.forEach((p, i) => {
+    const x = toX(i), y = toY(p.v);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  // Dot at last point
+  const lx = toX(points.length - 1);
+  const ly = toY(vals[vals.length - 1]);
+  ctx.beginPath();
+  ctx.arc(lx, ly, 3, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+function updateIndexUI(prefix, data) {
+  if (!data) return;
+  const priceEl = document.getElementById(`${prefix}Price`);
+  const pctEl   = document.getElementById(`${prefix}Pct`);
+  if (priceEl) priceEl.textContent = data.price != null ? data.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
+  if (pctEl) {
+    const isUp = data.changePct != null && data.changePct >= 0;
+    pctEl.textContent  = data.changePct != null ? (isUp ? '+' : '') + data.changePct.toFixed(2) + '%' : '—';
+    pctEl.className    = 'market-chart-pct ' + (data.changePct == null ? 'loading' : isUp ? 'pos' : 'neg');
+  }
+}
+
+function renderThemeRanking() {
+  const ranked = THEMES
+    .map(t => ({ name: t.name, pct: perfData[t.id]?.etf ?? null }))
+    .filter(t => t.pct != null)
+    .sort((a, b) => b.pct - a.pct);
+
+  if (!ranked.length) return;
+
+  const top3 = ranked.slice(0, 3);
+  const bot3 = ranked.slice(-3).reverse();
+
+  const row = (t) => `
+    <div class="ranking-row">
+      <span class="ranking-name">${t.name}</span>
+      <span class="ranking-pct ${t.pct >= 0 ? 'pos' : 'neg'}">${t.pct >= 0 ? '+' : ''}${t.pct.toFixed(2)}%</span>
+    </div>`;
+
+  document.getElementById('themeRankingTable').innerHTML = `
+    <div class="ranking-section-label top">▲ Top Performers</div>
+    ${top3.map(row).join('')}
+    <hr class="ranking-divider">
+    <div class="ranking-section-label bot">▼ Bottom Performers</div>
+    ${bot3.map(row).join('')}
+  `;
+}
+
+async function loadMarketOverview() {
+  const [spx, ndx] = await Promise.all([
+    fetchIndexIntraday('%5EGSPC'),
+    fetchIndexIntraday('%5EIXIC'),
+  ]);
+
+  updateIndexUI('spx', spx);
+  updateIndexUI('ndx', ndx);
+
+  // Draw after a brief tick so canvas has layout dimensions
+  requestAnimationFrame(() => {
+    if (spx?.points?.length) drawMiniChart('spxChart', spx.points, spx.prevClose, spx.changePct >= 0);
+    if (ndx?.points?.length) drawMiniChart('ndxChart', ndx.points, ndx.prevClose, ndx.changePct >= 0);
+  });
+}
+
 // ─── BREADTH ──────────────────────────────────────────────────────────────────
 
 const breadthState = {
-  up: null, down: null,          // from theme holdings
-  above50: null,                 // S5FI — % above 50-day MA
-  above200: null,                // S5TH — % above 200-day MA
-  highs: null,                   // ^NYHGH + ^NAHGH
-  lows: null,                    // ^NYLOW + ^NALOW
+  up: null, down: null,
+  above50: null,
+  above200: null,
+  highs: null,
+  lows: null,
+  lastComputed: null,  // timestamp of last full computation
 };
 
 function gaugeColor(pct) {
@@ -1381,15 +1720,27 @@ function recomputeBreadthFromCache() {
     breadthState.highs    = highs;
     breadthState.lows     = lows;
     renderBreadth();
+    const ts = document.getElementById('breadthTimestamp');
+    if (ts) ts.textContent = 'COMPUTED ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' · REFRESHES HOURLY';
   }
 }
 
-async function loadBreadth() {
+async function loadBreadth(force = false) {
+  const CACHE_MS = 60 * 60 * 1000; // 1 hour
+  const now = Date.now();
+
+  // If cached and not expired and not forced — just re-render from existing state
+  if (!force && breadthState.lastComputed && (now - breadthState.lastComputed) < CACHE_MS) {
+    renderBreadth();
+    return;
+  }
+
   breadthState.above50  = null;
   breadthState.above200 = null;
   breadthState.highs    = null;
   breadthState.lows     = null;
-  // Reset history cache on refresh
+  breadthState.lastComputed = null;
+  // Reset history cache on recompute
   for (const k of Object.keys(holdingHistory)) delete holdingHistory[k];
   renderBreadth();
 
@@ -1401,6 +1752,8 @@ async function loadBreadth() {
     recomputeBreadthFromCache();
     await sleep(150);
   }
+
+  breadthState.lastComputed = Date.now();
 }
 
 // Update advance/decline from loaded theme holdings (uses already-fetched changePercent)
@@ -1429,22 +1782,25 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
     currentTf = tab.dataset.tf;
-    // Clear data for new timeframe
     for (const key of Object.keys(perfData)) delete perfData[key];
     loadAll();
+    // Re-render breadth from cache (no recompute) — advance/decline updates via updateBreadthAdLine
+    renderBreadth();
   });
 });
 
 document.getElementById('refreshBtn').addEventListener('click', () => {
   for (const key of Object.keys(perfData)) delete perfData[key];
+  loadMarketOverview();
   loadAll();
-  loadBreadth();
+  loadBreadth(true);
 });
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 
-renderGrid(); // skeleton render
-renderBreadth(); // skeleton breadth
+renderGrid();
+renderBreadth();
+loadMarketOverview();
 loadAll();
 loadBreadth();
 
