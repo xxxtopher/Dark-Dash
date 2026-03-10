@@ -559,7 +559,7 @@
     border-bottom: 1px solid var(--border);
     padding: 8px 28px;
     display: grid;
-    grid-template-columns: 1fr 1fr auto;
+    grid-template-columns: 160px 160px 1fr 1fr;
     gap: 10px;
     align-items: stretch;
   }
@@ -568,8 +568,8 @@
     background: var(--bg3);
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 3px 7px;
-    min-height: 12px;
+    padding: 3px 6px;
+    min-height: 10px;
     display: flex;
     flex-direction: column;
   }
@@ -582,9 +582,9 @@
   }
 
   .market-chart-title {
-    font-size: 7px;
+    font-size: 6.5px;
     color: var(--text3);
-    letter-spacing: 1px;
+    letter-spacing: 0.8px;
     text-transform: uppercase;
   }
 
@@ -593,14 +593,14 @@
   }
 
   .market-chart-value {
-    font-size: 9px;
+    font-size: 8px;
     font-weight: 600;
     color: var(--text);
     letter-spacing: -0.3px;
   }
 
   .market-chart-pct {
-    font-size: 7px;
+    font-size: 6.5px;
     font-weight: 600;
     margin-top: 0px;
   }
@@ -612,7 +612,7 @@
   .chart-canvas-wrap {
     flex: 1;
     position: relative;
-    min-height: 20px;
+    min-height: 16px;
   }
 
   .chart-canvas-wrap canvas {
@@ -686,9 +686,72 @@
     margin: 4px 0;
   }
 
+  /* Stock performers panel — same shape as theme-ranking */
+  .stock-ranking {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 14px;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .stock-ranking-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 3px 0;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: background 0.1s;
+  }
+
+  .stock-ranking-row:hover { background: rgba(255,255,255,0.04); }
+
+  .sr-left {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    overflow: hidden;
+  }
+
+  .sr-ticker {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: 0.4px;
+  }
+
+  .sr-theme {
+    font-size: 8px;
+    color: var(--text3);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 140px;
+  }
+
+  .sr-pct {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.4px;
+    flex-shrink: 0;
+  }
+
+  .sr-pct.pos { color: var(--green); }
+  .sr-pct.neg { color: var(--red); }
+  .sr-pct.loading { color: var(--text3); font-size: 10px; font-weight: 400; animation: shimmer 1.5s infinite; }
+
+  @media (max-width: 1100px) {
+    .market-overview { grid-template-columns: 120px 120px 1fr 1fr; }
+  }
+
   @media (max-width: 900px) {
     .market-overview { grid-template-columns: 1fr 1fr; }
-    .theme-ranking { display: none; }
+    .theme-ranking, .stock-ranking { display: none; }
   }
 
   @media (max-width: 600px) {
@@ -996,6 +1059,26 @@
       <div class="ranking-row"><span class="ranking-name">—</span><span class="ranking-pct loading">···</span></div>
       <div class="ranking-row"><span class="ranking-name">—</span><span class="ranking-pct loading">···</span></div>
       <div class="ranking-row"><span class="ranking-name">—</span><span class="ranking-pct loading">···</span></div>
+    </div>
+  </div>
+
+  <!-- Stock performers -->
+  <div class="stock-ranking">
+    <div class="ranking-title">▸ Stock Movers · <span id="stockRankingTf">1D</span></div>
+    <div id="stockRankingTable">
+      <div class="ranking-section-label top">▲ Top Stocks</div>
+      <div class="stock-ranking-row"><div class="sr-left"><span class="sr-ticker">—</span></div><span class="sr-pct loading">···</span></div>
+      <div class="stock-ranking-row"><div class="sr-left"><span class="sr-ticker">—</span></div><span class="sr-pct loading">···</span></div>
+      <div class="stock-ranking-row"><div class="sr-left"><span class="sr-ticker">—</span></div><span class="sr-pct loading">···</span></div>
+      <div class="stock-ranking-row"><div class="sr-left"><span class="sr-ticker">—</span></div><span class="sr-pct loading">···</span></div>
+      <div class="stock-ranking-row"><div class="sr-left"><span class="sr-ticker">—</span></div><span class="sr-pct loading">···</span></div>
+      <hr class="ranking-divider">
+      <div class="ranking-section-label bot">▼ Bottom Stocks</div>
+      <div class="stock-ranking-row"><div class="sr-left"><span class="sr-ticker">—</span></div><span class="sr-pct loading">···</span></div>
+      <div class="stock-ranking-row"><div class="sr-left"><span class="sr-ticker">—</span></div><span class="sr-pct loading">···</span></div>
+      <div class="stock-ranking-row"><div class="sr-left"><span class="sr-ticker">—</span></div><span class="sr-pct loading">···</span></div>
+      <div class="stock-ranking-row"><div class="sr-left"><span class="sr-ticker">—</span></div><span class="sr-pct loading">···</span></div>
+      <div class="stock-ranking-row"><div class="sr-left"><span class="sr-ticker">—</span></div><span class="sr-pct loading">···</span></div>
     </div>
   </div>
 </div>
@@ -1524,6 +1607,7 @@ function applyQuotesToThemes(combined) {
   renderGrid();
   updateBreadthAdLine();
   renderThemeRanking();
+  renderStockRanking();
 }
 
 async function loadAllHistorical() {
@@ -1555,6 +1639,7 @@ async function loadAllHistorical() {
   renderGrid();
   updateBreadthAdLine();
   renderThemeRanking();
+  renderStockRanking();
   if (currentModalTheme) renderHoldings(currentModalTheme);
 }
 
@@ -1771,6 +1856,41 @@ function renderThemeRanking() {
     <div class="ranking-section-label bot">▼ Bottom Performers</div>
     ${bot5.map(row).join('')}
   `;
+}
+
+function renderStockRanking() {
+  // Collect all holding % changes across every theme
+  const all = [];
+  for (const theme of THEMES) {
+    const holdings = perfData[theme.id]?.holdings ?? {};
+    for (const [sym, pct] of Object.entries(holdings)) {
+      if (pct != null) all.push({ sym, pct, theme: theme.name });
+    }
+  }
+  if (!all.length) return;
+
+  all.sort((a, b) => b.pct - a.pct);
+  const top5 = all.slice(0, 5);
+  const bot5 = all.slice(-5).reverse();
+
+  const row = (s) => `
+    <div class="stock-ranking-row" onclick="window.open('https://www.tradingview.com/symbols/${s.sym}/','_blank')">
+      <div class="sr-left">
+        <span class="sr-ticker">${s.sym}</span>
+        <span class="sr-theme">${s.theme}</span>
+      </div>
+      <span class="sr-pct ${s.pct >= 0 ? 'pos' : 'neg'}">${s.pct >= 0 ? '+' : ''}${s.pct.toFixed(1)}%</span>
+    </div>`;
+
+  document.getElementById('stockRankingTable').innerHTML = `
+    <div class="ranking-section-label top">▲ Top Stocks</div>
+    ${top5.map(row).join('')}
+    <hr class="ranking-divider">
+    <div class="ranking-section-label bot">▼ Bottom Stocks</div>
+    ${bot5.map(row).join('')}
+  `;
+  const tfEl = document.getElementById('stockRankingTf');
+  if (tfEl) tfEl.textContent = currentTf;
 }
 
 async function loadMarketOverview() {
