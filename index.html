@@ -546,7 +546,7 @@
     grid-column: 1 / -1;
   }
 
-  .main-content { padding-bottom: 36px; }
+
 
   /* Scrollbar */
   ::-webkit-scrollbar { width: 4px; }
@@ -797,6 +797,122 @@
     margin-top: 3px;
   }
 
+  /* ── Watchlist ──────────────────────────────────────────────────── */
+  .content-wrap {
+    display: flex;
+    align-items: flex-start;
+  }
+
+  .watchlist-panel {
+    width: 280px;
+    flex-shrink: 0;
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    height: 100%;
+    position: sticky;
+    top: 0;
+    max-height: calc(100vh - 180px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .watchlist-panel::-webkit-scrollbar { width: 4px; }
+  .watchlist-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .watchlist-header {
+    position: sticky;
+    top: 0;
+    background: var(--bg2);
+    z-index: 2;
+    padding: 10px 14px 6px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .watchlist-title {
+    font-size: 9px;
+    color: var(--text3);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .watchlist-cols {
+    display: grid;
+    grid-template-columns: 52px 1fr 1fr 1fr;
+    gap: 2px;
+    padding: 0 2px;
+  }
+
+  .wcol-label {
+    font-size: 7.5px;
+    color: var(--text3);
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    text-align: right;
+  }
+
+  .wcol-label:first-child { text-align: left; }
+
+  .watchlist-group-label {
+    font-size: 8px;
+    color: var(--text3);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 7px 14px 3px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .watchlist-group-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .watchlist-row {
+    display: grid;
+    grid-template-columns: 52px 1fr 1fr 1fr;
+    gap: 2px;
+    padding: 4px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    cursor: pointer;
+    transition: background 0.12s;
+    align-items: center;
+  }
+
+  .watchlist-row:hover { background: var(--bg3); }
+
+  .w-ticker {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+  }
+
+  .w-val {
+    font-size: 10.5px;
+    font-weight: 600;
+    text-align: right;
+    letter-spacing: -0.2px;
+  }
+
+  .w-val.pos  { color: var(--green); }
+  .w-val.neg  { color: var(--red); }
+  .w-val.flat { color: var(--text3); }
+  .w-val.loading { color: var(--text3); font-size: 9px; font-weight: 400; animation: shimmer 1.5s infinite; }
+
+  .main-content {
+    flex: 1;
+    min-width: 0;
+    padding-bottom: 36px;
+  }
+
   /* Responsive */
   @media (max-width: 900px) {
     .breadth-grid { grid-template-columns: repeat(3, 1fr); }
@@ -901,8 +1017,29 @@
   </div>
 </div>
 
-<div class="main-content">
-  <div class="grid" id="themeGrid"></div>
+<div class="content-wrap">
+
+  <!-- WATCHLIST -->
+  <div class="watchlist-panel" id="watchlistPanel">
+    <div class="watchlist-header">
+      <div class="watchlist-title">▸ Watchlist</div>
+      <div class="watchlist-cols">
+        <div class="wcol-label">Ticker</div>
+        <div class="wcol-label">1D</div>
+        <div class="wcol-label">5D</div>
+        <div class="wcol-label">52W↓</div>
+      </div>
+    </div>
+    <div id="watchlistBody">
+      <!-- rendered by JS -->
+    </div>
+  </div>
+
+  <!-- THEME GRID -->
+  <div class="main-content">
+    <div class="grid" id="themeGrid"></div>
+  </div>
+
 </div>
 
 <div class="modal-overlay" id="modalOverlay">
@@ -1868,15 +2005,116 @@ document.getElementById('refreshBtn').addEventListener('click', () => {
   loadMarketOverview();
   loadAll();
   loadBreadth(true);
+  loadWatchlist();
 });
+
+// ─── WATCHLIST ────────────────────────────────────────────────────────────────
+
+const WATCHLIST = [
+  {
+    group: 'DRONES & DEFENSE',
+    color: '#ef9a9a',
+    tickers: ['ONDS','RCAT','KTOS','AVAV','UMAC','LASR','LPTH','OUST','FEIM','DPRO']
+  },
+  {
+    group: 'PHOTONICS',
+    color: '#80cbc4',
+    tickers: ['LITE','COHR','AAOI','GLW','FN','POET','MTSI','TSEM']
+  },
+  {
+    group: 'MEMORY',
+    color: '#ce93d8',
+    tickers: ['MU','SNDK','WDC','STX','CAMT','ONTO']
+  },
+  {
+    group: 'SEMICONDUCTOR EQUIP',
+    color: '#fff176',
+    tickers: ['AMAT','TER','KLAC','FORM','LRCX','AMKR']
+  }
+];
+
+// watchlist perf: { [sym]: { d1: null, d5: null, offHigh: null } }
+const wlData = {};
+
+function wlClass(v) {
+  if (v == null) return 'loading';
+  if (v > 0.05) return 'pos';
+  if (v < -0.05) return 'neg';
+  return 'flat';
+}
+
+function wlFmt(v, suffix = '%') {
+  if (v == null) return '···';
+  return (v >= 0 ? '+' : '') + v.toFixed(1) + suffix;
+}
+
+function renderWatchlist() {
+  const body = document.getElementById('watchlistBody');
+  if (!body) return;
+  let html = '';
+  for (const grp of WATCHLIST) {
+    html += `<div class="watchlist-group-label" style="color:${grp.color}">${grp.group}</div>`;
+    for (const sym of grp.tickers) {
+      const d = wlData[sym] || {};
+      const d1c  = wlClass(d.d1);
+      const d5c  = wlClass(d.d5);
+      const ohc  = d.offHigh != null ? (d.offHigh <= -20 ? 'neg' : d.offHigh <= -10 ? 'flat' : 'pos') : 'loading';
+      html += `
+        <div class="watchlist-row" onclick="window.open('https://www.tradingview.com/symbols/${sym}/','_blank')">
+          <div class="w-ticker">${sym}</div>
+          <div class="w-val ${d1c}">${wlFmt(d.d1)}</div>
+          <div class="w-val ${d5c}">${wlFmt(d.d5)}</div>
+          <div class="w-val ${ohc}">${d.offHigh != null ? wlFmt(d.offHigh) : '···'}</div>
+        </div>`;
+    }
+  }
+  body.innerHTML = html;
+}
+
+async function loadWatchlist() {
+  const allSyms = [...new Set(WATCHLIST.flatMap(g => g.tickers))];
+
+  // Fetch 1y history for each symbol (gives us 1D, 5D, and 52-week high)
+  await Promise.all(allSyms.map(async sym => {
+    try {
+      const url = `${YF_BASE}/v8/finance/chart/${sym}?range=1y&interval=1d`;
+      const data = await fetchWithProxy(url);
+      const result = data?.chart?.result?.[0];
+      if (!result) return;
+
+      const closes = (result.indicators?.quote?.[0]?.close ?? []).filter(v => v != null);
+      if (closes.length < 2) return;
+
+      const meta = result.meta;
+      const price     = meta.regularMarketPrice ?? closes[closes.length - 1];
+      const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? closes[closes.length - 2];
+
+      const d1 = prevClose ? ((price - prevClose) / prevClose) * 100 : null;
+
+      // 5D: price vs close 5 trading days ago
+      const close5ago = closes.length >= 6 ? closes[closes.length - 6] : closes[0];
+      const d5 = close5ago ? ((price - close5ago) / close5ago) * 100 : null;
+
+      // 52-week high: max of last 252 closes
+      const high52 = Math.max(...closes.slice(-252));
+      const offHigh = high52 > 0 ? ((price - high52) / high52) * 100 : null;
+
+      wlData[sym] = { d1, d5, offHigh };
+    } catch { /* skip failed */ }
+  }));
+
+  renderWatchlist();
+}
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 
 renderGrid();
 renderBreadth();
+renderWatchlist();
 loadMarketOverview();
 loadAll();
 loadBreadth();
+loadWatchlist();
 
 </script>
 </body>
