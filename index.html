@@ -612,7 +612,7 @@
   .chart-canvas-wrap {
     flex: 1;
     position: relative;
-    min-height: 16px;
+    min-height: 55px;
   }
 
   .chart-canvas-wrap canvas {
@@ -1661,30 +1661,37 @@ async function loadAll() {
 // ─── MARKET OVERVIEW ─────────────────────────────────────────────────────────
 
 async function fetchIndexIntraday(symbol) {
-  // Fetch today's 5-min intraday data
+  // Fetch today's 5-min intraday OHLC data
   const url = `${YF_BASE}/v8/finance/chart/${symbol}?range=1d&interval=5m`;
   const data = await fetchWithProxy(url);
   const result = data?.chart?.result?.[0];
   if (!result) return null;
-  const meta      = result.meta;
-  const closes    = result.indicators?.quote?.[0]?.close ?? [];
+  const meta       = result.meta;
+  const quote      = result.indicators?.quote?.[0] ?? {};
+  const opens      = quote.open      ?? [];
+  const highs      = quote.high      ?? [];
+  const lows       = quote.low       ?? [];
+  const closes     = quote.close     ?? [];
   const timestamps = result.timestamp ?? [];
-  const price     = meta.regularMarketPrice ?? null;
-  const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? null;
-  const changePct = (price != null && prevClose != null && prevClose !== 0)
+  const price      = meta.regularMarketPrice ?? null;
+  const prevClose  = meta.chartPreviousClose ?? meta.previousClose ?? null;
+  const changePct  = (price != null && prevClose != null && prevClose !== 0)
     ? ((price - prevClose) / prevClose) * 100 : null;
 
-  // Filter nulls
-  const points = [];
-  for (let i = 0; i < closes.length; i++) {
-    if (closes[i] != null) points.push({ t: timestamps[i], v: closes[i] });
+  // Build candle array — skip bars where any OHLC value is null
+  const candles = [];
+  for (let i = 0; i < timestamps.length; i++) {
+    const o = opens[i], h = highs[i], l = lows[i], c = closes[i];
+    if (o != null && h != null && l != null && c != null) {
+      candles.push({ t: timestamps[i], o, h, l, c });
+    }
   }
-  return { price, changePct, prevClose, points };
+  return { price, changePct, prevClose, candles };
 }
 
-function drawMiniChart(canvasId, points, prevClose, isUp) {
+function drawCandleChart(canvasId, candles, prevClose) {
   const canvas = document.getElementById(canvasId);
-  if (!canvas || !points.length) return;
+  if (!canvas || !candles.length) return;
   const wrap = canvas.parentElement;
   const W = wrap.clientWidth  || 300;
   const H = wrap.clientHeight || 60;
@@ -1693,44 +1700,41 @@ function drawMiniChart(canvasId, points, prevClose, isUp) {
   const ctx = canvas.getContext('2d');
   ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
 
-  // Market hours in Unix seconds (ET = UTC-5 in winter, UTC-4 in summer)
-  // Determine today's market open/close in UTC
-  const now = new Date();
-  const todayET = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  const y = todayET.getFullYear(), mo = todayET.getMonth(), d = todayET.getDate();
-  // Market open 9:30am ET, close 4:00pm ET — convert to UTC timestamps (seconds)
-  const openET  = new Date(y, mo, d,  9, 30, 0);
-  const closeET = new Date(y, mo, d, 16,  0, 0);
-  // Adjust from local Date (which is in browser local time) to ET offset
-  const etOffset  = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' })).getTime() - now.getTime();
-  const openUTC   = openET.getTime()  - etOffset; // ms
-  const closeUTC  = closeET.getTime() - etOffset; // ms
-  const marketDur = closeUTC - openUTC; // total 6.5h in ms
+  // ET offset for market hours
+  const now     = new Date();
+  const etNow   = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const yr = etNow.getFullYear(), mo = etNow.getMonth(), dy = etNow.getDate();
+  const etOffset  = etNow.getTime() - now.getTime();
+  const openUTC   = new Date(yr, mo, dy,  9, 30, 0).getTime() - etOffset;
+  const closeUTC  = new Date(yr, mo, dy, 16,  0, 0).getTime() - etOffset;
+  const marketDur = closeUTC - openUTC;
 
-  // Layout: leave bottom LABEL_H px for time labels
+  // Layout — bottom LABEL_H for x-axis labels
   const LABEL_H = 14;
   const chartH  = H - LABEL_H;
-  const PAD_L   = 2, PAD_R = 2;
-  const chartW  = W - PAD_L - PAD_R;
+  const PAD_L = 2, PAD_R = 2;
+  const chartW = W - PAD_L - PAD_R;
 
-  // Map a UTC ms timestamp to x pixel
   const tToX = tsMs => PAD_L + ((tsMs - openUTC) / marketDur) * chartW;
 
-  // Price range — include prevClose
-  const vals = points.map(p => p.v);
-  const minV = Math.min(...vals, prevClose ?? Infinity);
-  const maxV = Math.max(...vals, prevClose ?? -Infinity);
+  // Price range across all candle highs/lows + prevClose
+  const allH = candles.map(c => c.h);
+  const allL = candles.map(c => c.l);
+  const minV = Math.min(...allL, prevClose ?? Infinity);
+  const maxV = Math.max(...allH, prevClose ?? -Infinity);
   const pRange = maxV - minV || 1;
-  const toY = v => (chartH * 0.05) + (1 - (v - minV) / pRange) * (chartH * 0.88);
+  const toY = v => chartH * 0.04 + (1 - (v - minV) / pRange) * chartH * 0.88;
 
-  const color = isUp ? '#00e676' : '#ff4444';
+  // Candle width: base on 5-min slots in 6.5h session = 78 slots
+  const slotW  = chartW / 78;
+  const bodyW  = Math.max(1.5, slotW * 0.6);
 
   // ── Prev close baseline ──
   if (prevClose != null) {
     const baseY = toY(prevClose);
     ctx.beginPath();
     ctx.setLineDash([3, 4]);
-    ctx.strokeStyle = 'rgba(100,130,150,0.35)';
+    ctx.strokeStyle = 'rgba(100,130,150,0.4)';
     ctx.lineWidth = 1;
     ctx.moveTo(PAD_L, baseY);
     ctx.lineTo(PAD_L + chartW, baseY);
@@ -1738,50 +1742,45 @@ function drawMiniChart(canvasId, points, prevClose, isUp) {
     ctx.setLineDash([]);
   }
 
-  // ── Gradient fill ──
-  const grad = ctx.createLinearGradient(0, 0, 0, chartH);
-  grad.addColorStop(0, isUp ? 'rgba(0,230,118,0.18)' : 'rgba(255,68,68,0.18)');
-  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  // ── Draw candles ──
+  for (const c of candles) {
+    const cx    = tToX(c.t * 1000);
+    const isGreen = c.c >= c.o;
+    const color   = isGreen ? '#00e676' : '#ff4444';
+    const wickColor = isGreen ? 'rgba(0,230,118,0.55)' : 'rgba(255,68,68,0.55)';
 
-  ctx.beginPath();
-  let started = false;
-  for (const p of points) {
-    const x = tToX(p.t * 1000);
-    const y = toY(p.v);
-    if (!started) { ctx.moveTo(x, y); started = true; }
-    else ctx.lineTo(x, y);
+    const openY  = toY(c.o);
+    const closeY = toY(c.c);
+    const highY  = toY(c.h);
+    const lowY   = toY(c.l);
+    const bodyTop    = Math.min(openY, closeY);
+    const bodyBottom = Math.max(openY, closeY);
+    const bodyHeight = Math.max(1, bodyBottom - bodyTop);
+
+    // Wick
+    ctx.beginPath();
+    ctx.strokeStyle = wickColor;
+    ctx.lineWidth = 1;
+    ctx.moveTo(cx, highY);
+    ctx.lineTo(cx, lowY);
+    ctx.stroke();
+
+    // Body
+    ctx.fillStyle = color;
+    ctx.fillRect(cx - bodyW / 2, bodyTop, bodyW, bodyHeight);
   }
-  const lastX = tToX(points[points.length - 1].t * 1000);
-  ctx.lineTo(lastX, chartH);
-  ctx.lineTo(tToX(points[0].t * 1000), chartH);
-  ctx.closePath();
-  ctx.fillStyle = grad;
-  ctx.fill();
 
-  // ── Price line ──
-  ctx.beginPath();
-  started = false;
-  for (const p of points) {
-    const x = tToX(p.t * 1000);
-    const y = toY(p.v);
-    if (!started) { ctx.moveTo(x, y); started = true; }
-    else ctx.lineTo(x, y);
-  }
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 3;
-  ctx.lineJoin = 'round';
-  ctx.stroke();
-
-  // ── Dot at latest price ──
-  const lastPt  = points[points.length - 1];
-  const dotX = tToX(lastPt.t * 1000);
-  const dotY = toY(lastPt.v);
+  // ── Dot on last close ──
+  const last = candles[candles.length - 1];
+  const dotX = tToX(last.t * 1000);
+  const dotY = toY(last.c);
+  const dotColor = last.c >= last.o ? '#00e676' : '#ff4444';
   ctx.beginPath();
   ctx.arc(dotX, dotY, 2.5, 0, Math.PI * 2);
-  ctx.fillStyle = color;
+  ctx.fillStyle = dotColor;
   ctx.fill();
 
-  // ── X-axis time labels every 2 hours: 9:30, 11:30, 1:30, 3:30 ──
+  // ── X-axis time labels every 2 hours ──
   const labelTimes = [
     { h: 9,  m: 30, label: '9:30'  },
     { h: 11, m: 30, label: '11:30' },
@@ -1789,27 +1788,21 @@ function drawMiniChart(canvasId, points, prevClose, isUp) {
     { h: 15, m: 30, label: '3:30'  },
     { h: 16, m: 0,  label: '4:00'  },
   ];
-
-  ctx.font = `${7 * window.devicePixelRatio / window.devicePixelRatio}px "IBM Plex Mono", monospace`;
   ctx.font = '7px "IBM Plex Mono", monospace';
   ctx.fillStyle = 'rgba(100,130,150,0.6)';
   ctx.textAlign = 'center';
 
   for (const lt of labelTimes) {
-    const ltDate = new Date(y, mo, d, lt.h, lt.m, 0);
-    const ltUTC  = ltDate.getTime() - etOffset;
-    const lx     = tToX(ltUTC);
+    const ltUTC = new Date(yr, mo, dy, lt.h, lt.m, 0).getTime() - etOffset;
+    const lx    = tToX(ltUTC);
     if (lx < PAD_L || lx > PAD_L + chartW) continue;
-
-    // Tick mark
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(100,130,150,0.25)';
+    ctx.strokeStyle = 'rgba(100,130,150,0.2)';
     ctx.lineWidth = 1;
     ctx.moveTo(lx, chartH);
     ctx.lineTo(lx, chartH + 3);
     ctx.stroke();
-
-    // Label
+    ctx.fillStyle = 'rgba(100,130,150,0.6)';
     ctx.fillText(lt.label, lx, H - 2);
   }
 }
@@ -1898,8 +1891,8 @@ async function loadMarketOverview() {
 
   // Draw after a brief tick so canvas has layout dimensions
   requestAnimationFrame(() => {
-    if (spx?.points?.length) drawMiniChart('spxChart', spx.points, spx.prevClose, spx.changePct >= 0);
-    if (ndx?.points?.length) drawMiniChart('ndxChart', ndx.points, ndx.prevClose, ndx.changePct >= 0);
+    if (spx?.candles?.length) drawCandleChart('spxChart', spx.candles, spx.prevClose);
+    if (ndx?.candles?.length) drawCandleChart('ndxChart', ndx.candles, ndx.prevClose);
   });
 }
 
