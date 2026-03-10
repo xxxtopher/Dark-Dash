@@ -1200,16 +1200,8 @@ function barWidth(v, max = 5) {
 }
 
 function tvLink(symbol) {
-  // Guess exchange
-  const nasdaq = ['NVDA','AMD','MSFT','GOOGL','AMZN','META','AAPL','AVGO','QCOM','AMAT','MU','INTC','ASML',
-    'PANW','CRWD','FTNT','ZS','OKTA','IONQ','RGTI','QBTS','QUBT','ISRG','JOBY','ACHR','MELI','CHWY',
-    'SMCI','DELL','CYBR','IRBT','BRKS','NNDM','MKFG','RCAT','ONDS','AVAV','KTOS','SPCE','ASTR','MNTS','BARK','BURL',
-    'CCJ','NXE','UEC','UUUU','DNN','URG','SMR','MP','ALB','LAC','SGML','IRDM','RKT','VSAT','HII','UMAC','EQNR','BBWI','GME'];
-  const nyse = ['LMT','RTX','NOC','GD','BA','LDOS','NEE','AES','ED','ETR','SO','DUK','EXC','PCG','NEM','AEM','GOLD','WPM','KGC',
-    'FCX','SCCO','TECK','HBM','AGI','OR','NGD','PAAS','CDE','HL','SSRM','FSM','SILV','WMT','TGT','AMZN',
-    'IBM','MSFT','GOOGL','COST','RL','TPR','RH','PVH','CPRI','HON','CMMC','ERO','MAXR','PLAG','NOVN','L3H','HPE','PCG'];
-  const ex = nasdaq.includes(symbol) ? 'NASDAQ' : 'NYSE';
-  return `https://www.tradingview.com/chart/?symbol=${ex}%3A${symbol}`;
+  // Use TradingView's symbol search — no exchange prefix needed, TV auto-resolves US tickers
+  return `https://www.tradingview.com/symbols/${symbol}/`;
 }
 
 function renderGrid() {
