@@ -656,11 +656,11 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 3px 0;
+    padding: 2px 0;
   }
 
   .ranking-name {
-    font-size: 10px;
+    font-size: 9px;
     color: var(--text);
     letter-spacing: 0.3px;
     white-space: nowrap;
@@ -670,7 +670,7 @@
   }
 
   .ranking-pct {
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
     letter-spacing: -0.3px;
     flex-shrink: 0;
@@ -699,7 +699,7 @@
   .breadth-panel {
     background: var(--bg2);
     border-bottom: 1px solid var(--border);
-    padding: 16px 28px;
+    padding: 12px 28px;
   }
 
   .breadth-label {
@@ -712,30 +712,30 @@
 
   .breadth-grid {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 12px;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
   }
 
   .breadth-card {
     background: var(--bg3);
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 12px 14px;
+    padding: 8px 10px;
     position: relative;
     overflow: hidden;
   }
 
   .breadth-card-title {
-    font-size: 9px;
+    font-size: 8px;
     color: var(--text3);
-    letter-spacing: 1px;
+    letter-spacing: 0.8px;
     text-transform: uppercase;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
     line-height: 1.3;
   }
 
   .breadth-value {
-    font-size: 22px;
+    font-size: 17px;
     font-weight: 700;
     line-height: 1;
     letter-spacing: -0.5px;
@@ -744,22 +744,22 @@
   .breadth-value.pos { color: var(--green); }
   .breadth-value.neg { color: var(--red); }
   .breadth-value.neutral { color: var(--text); }
-  .breadth-value.loading { color: var(--text3); font-size: 13px; font-weight: 400; animation: shimmer 1.5s infinite; }
+  .breadth-value.loading { color: var(--text3); font-size: 11px; font-weight: 400; animation: shimmer 1.5s infinite; }
 
   .breadth-sub {
-    font-size: 9px;
+    font-size: 8px;
     color: var(--text3);
-    margin-top: 4px;
+    margin-top: 3px;
     letter-spacing: 0.3px;
   }
 
   /* Advance/decline bar */
   .ad-bar {
     display: flex;
-    height: 4px;
+    height: 3px;
     border-radius: 2px;
     overflow: hidden;
-    margin-top: 8px;
+    margin-top: 6px;
     background: var(--border);
   }
 
@@ -772,11 +772,11 @@
   }
 
   .gauge-track {
-    height: 3px;
+    height: 2px;
     background: var(--border);
     border-radius: 2px;
     overflow: hidden;
-    margin-top: 6px;
+    margin-top: 5px;
   }
 
   .gauge-fill {
@@ -871,8 +871,12 @@
       <div class="ranking-row"><span class="ranking-name">—</span><span class="ranking-pct loading">···</span></div>
       <div class="ranking-row"><span class="ranking-name">—</span><span class="ranking-pct loading">···</span></div>
       <div class="ranking-row"><span class="ranking-name">—</span><span class="ranking-pct loading">···</span></div>
+      <div class="ranking-row"><span class="ranking-name">—</span><span class="ranking-pct loading">···</span></div>
+      <div class="ranking-row"><span class="ranking-name">—</span><span class="ranking-pct loading">···</span></div>
       <hr class="ranking-divider">
       <div class="ranking-section-label bot">▼ Bottom Performers</div>
+      <div class="ranking-row"><span class="ranking-name">—</span><span class="ranking-pct loading">···</span></div>
+      <div class="ranking-row"><span class="ranking-name">—</span><span class="ranking-pct loading">···</span></div>
       <div class="ranking-row"><span class="ranking-name">—</span><span class="ranking-pct loading">···</span></div>
       <div class="ranking-row"><span class="ranking-name">—</span><span class="ranking-pct loading">···</span></div>
       <div class="ranking-row"><span class="ranking-name">—</span><span class="ranking-pct loading">···</span></div>
@@ -1622,8 +1626,8 @@ function renderThemeRanking() {
 
   if (!ranked.length) return;
 
-  const top3 = ranked.slice(0, 3);
-  const bot3 = ranked.slice(-3).reverse();
+  const top5 = ranked.slice(0, 5);
+  const bot5 = ranked.slice(-5).reverse();
 
   const row = (t) => `
     <div class="ranking-row">
@@ -1633,10 +1637,10 @@ function renderThemeRanking() {
 
   document.getElementById('themeRankingTable').innerHTML = `
     <div class="ranking-section-label top">▲ Top Performers</div>
-    ${top3.map(row).join('')}
+    ${top5.map(row).join('')}
     <hr class="ranking-divider">
     <div class="ranking-section-label bot">▼ Bottom Performers</div>
-    ${bot3.map(row).join('')}
+    ${bot5.map(row).join('')}
   `;
 }
 
