@@ -863,7 +863,7 @@
   /* ── Watchlist ──────────────────────────────────────────────────── */
   .content-wrap {
     display: flex;
-    align-items: flex-start;
+    align-items: stretch;
   }
 
   .watchlist-panel {
@@ -871,13 +871,7 @@
     flex-shrink: 0;
     background: var(--bg2);
     border-right: 1px solid var(--border);
-    height: 100%;
-    position: sticky;
-    top: 0;
-    max-height: calc(100vh - 180px);
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--border) transparent;
+    overflow-y: visible;
   }
 
   .watchlist-panel::-webkit-scrollbar { width: 4px; }
