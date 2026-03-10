@@ -612,7 +612,7 @@
   .chart-canvas-wrap {
     flex: 1;
     position: relative;
-    min-height: 18px;
+    min-height: 34px;
   }
 
   .chart-canvas-wrap canvas {
@@ -1474,70 +1474,132 @@ function drawMiniChart(canvasId, points, prevClose, isUp) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || !points.length) return;
   const wrap = canvas.parentElement;
-  const W = wrap.clientWidth || 300;
+  const W = wrap.clientWidth  || 300;
   const H = wrap.clientHeight || 60;
   canvas.width  = W * window.devicePixelRatio;
   canvas.height = H * window.devicePixelRatio;
   const ctx = canvas.getContext('2d');
   ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
 
+  // Market hours in Unix seconds (ET = UTC-5 in winter, UTC-4 in summer)
+  // Determine today's market open/close in UTC
+  const now = new Date();
+  const todayET = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const y = todayET.getFullYear(), mo = todayET.getMonth(), d = todayET.getDate();
+  // Market open 9:30am ET, close 4:00pm ET — convert to UTC timestamps (seconds)
+  const openET  = new Date(y, mo, d,  9, 30, 0);
+  const closeET = new Date(y, mo, d, 16,  0, 0);
+  // Adjust from local Date (which is in browser local time) to ET offset
+  const etOffset  = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' })).getTime() - now.getTime();
+  const openUTC   = openET.getTime()  - etOffset; // ms
+  const closeUTC  = closeET.getTime() - etOffset; // ms
+  const marketDur = closeUTC - openUTC; // total 6.5h in ms
+
+  // Layout: leave bottom LABEL_H px for time labels
+  const LABEL_H = 14;
+  const chartH  = H - LABEL_H;
+  const PAD_L   = 2, PAD_R = 2;
+  const chartW  = W - PAD_L - PAD_R;
+
+  // Map a UTC ms timestamp to x pixel
+  const tToX = tsMs => PAD_L + ((tsMs - openUTC) / marketDur) * chartW;
+
+  // Price range — include prevClose
   const vals = points.map(p => p.v);
   const minV = Math.min(...vals, prevClose ?? Infinity);
   const maxV = Math.max(...vals, prevClose ?? -Infinity);
-  const range = maxV - minV || 1;
-
-  const toX = i => (i / (points.length - 1)) * W;
-  const toY = v => H - ((v - minV) / range) * (H * 0.85) - H * 0.05;
+  const pRange = maxV - minV || 1;
+  const toY = v => (chartH * 0.05) + (1 - (v - minV) / pRange) * (chartH * 0.88);
 
   const color = isUp ? '#00e676' : '#ff4444';
 
-  // Draw prev close baseline
+  // ── Prev close baseline ──
   if (prevClose != null) {
     const baseY = toY(prevClose);
     ctx.beginPath();
     ctx.setLineDash([3, 4]);
-    ctx.strokeStyle = 'rgba(100,130,150,0.4)';
+    ctx.strokeStyle = 'rgba(100,130,150,0.35)';
     ctx.lineWidth = 1;
-    ctx.moveTo(0, baseY);
-    ctx.lineTo(W, baseY);
+    ctx.moveTo(PAD_L, baseY);
+    ctx.lineTo(PAD_L + chartW, baseY);
     ctx.stroke();
     ctx.setLineDash([]);
   }
 
-  // Fill gradient
-  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  // ── Gradient fill ──
+  const grad = ctx.createLinearGradient(0, 0, 0, chartH);
   grad.addColorStop(0, isUp ? 'rgba(0,230,118,0.18)' : 'rgba(255,68,68,0.18)');
   grad.addColorStop(1, 'rgba(0,0,0,0)');
 
   ctx.beginPath();
-  points.forEach((p, i) => {
-    const x = toX(i), y = toY(p.v);
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  });
-  ctx.lineTo(toX(points.length - 1), H);
-  ctx.lineTo(0, H);
+  let started = false;
+  for (const p of points) {
+    const x = tToX(p.t * 1000);
+    const y = toY(p.v);
+    if (!started) { ctx.moveTo(x, y); started = true; }
+    else ctx.lineTo(x, y);
+  }
+  const lastX = tToX(points[points.length - 1].t * 1000);
+  ctx.lineTo(lastX, chartH);
+  ctx.lineTo(tToX(points[0].t * 1000), chartH);
   ctx.closePath();
   ctx.fillStyle = grad;
   ctx.fill();
 
-  // Draw line
+  // ── Price line ──
   ctx.beginPath();
-  points.forEach((p, i) => {
-    const x = toX(i), y = toY(p.v);
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  });
+  started = false;
+  for (const p of points) {
+    const x = tToX(p.t * 1000);
+    const y = toY(p.v);
+    if (!started) { ctx.moveTo(x, y); started = true; }
+    else ctx.lineTo(x, y);
+  }
   ctx.strokeStyle = color;
   ctx.lineWidth = 1.5;
   ctx.lineJoin = 'round';
   ctx.stroke();
 
-  // Dot at last point
-  const lx = toX(points.length - 1);
-  const ly = toY(vals[vals.length - 1]);
+  // ── Dot at latest price ──
+  const lastPt  = points[points.length - 1];
+  const dotX = tToX(lastPt.t * 1000);
+  const dotY = toY(lastPt.v);
   ctx.beginPath();
-  ctx.arc(lx, ly, 3, 0, Math.PI * 2);
+  ctx.arc(dotX, dotY, 2.5, 0, Math.PI * 2);
   ctx.fillStyle = color;
   ctx.fill();
+
+  // ── X-axis time labels every 2 hours: 9:30, 11:30, 1:30, 3:30 ──
+  const labelTimes = [
+    { h: 9,  m: 30, label: '9:30'  },
+    { h: 11, m: 30, label: '11:30' },
+    { h: 13, m: 30, label: '1:30'  },
+    { h: 15, m: 30, label: '3:30'  },
+    { h: 16, m: 0,  label: '4:00'  },
+  ];
+
+  ctx.font = `${7 * window.devicePixelRatio / window.devicePixelRatio}px "IBM Plex Mono", monospace`;
+  ctx.font = '7px "IBM Plex Mono", monospace';
+  ctx.fillStyle = 'rgba(100,130,150,0.6)';
+  ctx.textAlign = 'center';
+
+  for (const lt of labelTimes) {
+    const ltDate = new Date(y, mo, d, lt.h, lt.m, 0);
+    const ltUTC  = ltDate.getTime() - etOffset;
+    const lx     = tToX(ltUTC);
+    if (lx < PAD_L || lx > PAD_L + chartW) continue;
+
+    // Tick mark
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(100,130,150,0.25)';
+    ctx.lineWidth = 1;
+    ctx.moveTo(lx, chartH);
+    ctx.lineTo(lx, chartH + 3);
+    ctx.stroke();
+
+    // Label
+    ctx.fillText(lt.label, lx, H - 2);
+  }
 }
 
 function updateIndexUI(prefix, data) {
