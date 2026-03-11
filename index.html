@@ -1368,94 +1368,106 @@ const THEMES = [
 
 // ─── CORS PROXY ───────────────────────────────────────────────────────────────
 
-const PROXIES = [
-  url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
-  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-  url => `https://thingproxy.freeboard.io/fetch/${url}`,
-  url => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(url)}`,
-];
-
-let activeProxy = 0;
-const proxyFailCount = new Array(PROXIES.length).fill(0);
-
-async function fetchWithProxy(url, retries = 2) {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    // cycle through proxies — prefer less-failed ones
-    for (let i = 0; i < PROXIES.length; i++) {
-      const proxyIdx = (activeProxy + i) % PROXIES.length;
-      // skip proxies with too many recent failures
-      if (proxyFailCount[proxyIdx] > 5 && i < PROXIES.length - 1) continue;
-      try {
-        const proxied = PROXIES[proxyIdx](url);
-        const res = await fetch(proxied, { signal: AbortSignal.timeout(12000) });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const text = await res.text();
-        if (!text || text.trim() === '') throw new Error('Empty response');
-        const data = JSON.parse(text);
-        // success — reset fail count and lock to this proxy
-        proxyFailCount[proxyIdx] = Math.max(0, proxyFailCount[proxyIdx] - 1);
-        activeProxy = proxyIdx;
-        return data;
-      } catch (e) {
-        proxyFailCount[(activeProxy + i) % PROXIES.length]++;
-        if (i === PROXIES.length - 1 && attempt === retries) throw e;
-      }
-    }
-    if (attempt < retries) await sleep(300 * (attempt + 1));
-  }
-}
-
-// ─── REQUEST THROTTLE ─────────────────────────────────────────────────────────
-// Limits concurrent outgoing requests to avoid overwhelming proxies
-
-const MAX_CONCURRENT = 8;
-let activeRequests = 0;
-const requestQueue = [];
-
-function throttledFetch(fn) {
-  return new Promise((resolve, reject) => {
-    const task = async () => {
-      activeRequests++;
-      try {
-        resolve(await fn());
-      } catch (e) {
-        reject(e);
-      } finally {
-        activeRequests--;
-        if (requestQueue.length > 0) requestQueue.shift()();
-      }
-    };
-    if (activeRequests < MAX_CONCURRENT) task();
-    else requestQueue.push(task);
-  });
-}
-
-async function fetchWithProxyThrottled(url) {
-  return throttledFetch(() => fetchWithProxy(url));
-}
-
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-// ─── YAHOO FINANCE ────────────────────────────────────────────────────────────
 
 const YF_BASE = 'https://query2.finance.yahoo.com';
 
+// Two proxies tried in parallel — first response wins
+async function fetchRaw(url) {
+  const proxied1 = `https://corsproxy.io/?url=${encodeURIComponent(url)}`;
+  const proxied2 = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+
+  // Race both proxies — whichever responds first wins
+  const tryFetch = async (proxyUrl) => {
+    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    if (!text || text.length < 10) throw new Error('Empty');
+    return JSON.parse(text);
+  };
+
+  // Try proxy1 first; if it fails within 3s fall back to proxy2 racing alongside
+  try {
+    return await Promise.any([
+      tryFetch(proxied1),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('slow')), 3000))
+        .catch(() => tryFetch(proxied2))
+    ]);
+  } catch {
+    // Last resort: try proxy2 directly
+    return await tryFetch(proxied2);
+  }
+}
+
+// ─── BATCH QUOTE API (1D) ─────────────────────────────────────────────────────
+// Yahoo v7 /quote returns price + changePercent for up to ~200 symbols in ONE request
+
+const BATCH_SIZE = 120; // safe batch size for the query string
+
+async function fetchBatchQuotes(symbols) {
+  // Returns { [symbol]: { changePercent, price } }
+  const result = {};
+  const chunks = [];
+  for (let i = 0; i < symbols.length; i += BATCH_SIZE)
+    chunks.push(symbols.slice(i, i + BATCH_SIZE));
+
+  await Promise.all(chunks.map(async (chunk) => {
+    const syms = chunk.join(',');
+    const url = `${YF_BASE}/v7/finance/quote?symbols=${encodeURIComponent(syms)}&fields=regularMarketPrice,regularMarketChangePercent`;
+    try {
+      const data = await fetchRaw(url);
+      const quotes = data?.quoteResponse?.result ?? [];
+      for (const q of quotes) {
+        result[q.symbol] = {
+          changePercent: q.regularMarketChangePercent ?? null,
+          price: q.regularMarketPrice ?? null,
+        };
+      }
+    } catch (e) {
+      console.warn('Batch quote failed for chunk', chunk[0], e.message);
+    }
+  }));
+
+  return result;
+}
+
+// ─── HISTORICAL (5D / 1M / YTD) ───────────────────────────────────────────────
+// Fetches individual chart history — but only for ETFs + holdings, batched by time
+
 async function fetchHistory(symbol, range) {
-  // range: '5d', '1mo', 'ytd'
   const url = `${YF_BASE}/v8/finance/chart/${symbol}?range=${range}&interval=1d`;
-  const data = await fetchWithProxyThrottled(url);
-  const closes = data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close;
-  return closes || [];
+  const data = await fetchRaw(url);
+  const closes = data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? [];
+  return closes.filter(v => v != null);
 }
 
 function calcChangeFromHistory(closes) {
   if (!closes || closes.length < 2) return null;
-  const valid = closes.filter(v => v != null);
-  if (valid.length < 2) return null;
-  const first = valid[0];
-  const last = valid[valid.length - 1];
+  const first = closes[0], last = closes[closes.length - 1];
+  if (!first || !last) return null;
   return ((last - first) / first) * 100;
 }
+
+// Fetch history for many symbols with capped concurrency (avoid proxy hammering)
+async function fetchHistoryBatch(symbols, range, concurrency = 12) {
+  const results = {};
+  let i = 0;
+  const worker = async () => {
+    while (i < symbols.length) {
+      const sym = symbols[i++];
+      try {
+        const closes = await fetchHistory(sym, range);
+        results[sym] = calcChangeFromHistory(closes);
+      } catch { results[sym] = null; }
+    }
+  };
+  await Promise.all(Array.from({ length: concurrency }, worker));
+  return results;
+}
+
+// Single-symbol chart fetch (for intraday candles, watchlist 1y, breadth)
+async function fetchWithProxy(url) { return fetchRaw(url); }
+async function fetchWithProxyThrottled(url) { return fetchRaw(url); }
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
 
@@ -1544,10 +1556,6 @@ function renderGrid() {
 
 function updateStatusBar() {
   document.getElementById('statusLoaded').textContent = loadedCount;
-  // Show which proxy is active
-  const proxyNames = ['corsproxy.io', 'allorigins.win', 'thingproxy', 'codetabs'];
-  const pEl = document.getElementById('statusProxy');
-  if (pEl) pEl.textContent = 'via ' + (proxyNames[activeProxy] || 'proxy');
 }
 
 // ─── MODAL ────────────────────────────────────────────────────────────────────
@@ -1632,38 +1640,10 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
 const TF_RANGE = { '1D': null, '5D': '5d', '1M': '1mo', 'YTD': 'ytd' };
 
 async function loadAll1D() {
-  // Collect all unique symbols across all themes
   const allSymbols = [...new Set(THEMES.flatMap(t => [t.etf, ...t.holdings]))];
-  const combined = {};
-  let resolved = 0;
 
-  // Fire all requests through throttle — renders progressively as each ETF symbol resolves
-  await Promise.all(allSymbols.map(async sym => {
-    try {
-      const url = `${YF_BASE}/v8/finance/chart/${sym}?range=1d&interval=1d`;
-      const data = await fetchWithProxyThrottled(url);
-      const meta = data?.chart?.result?.[0]?.meta;
-      if (!meta) { combined[sym] = { changePercent: null, price: null }; }
-      else {
-        const price     = meta.regularMarketPrice ?? null;
-        const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? null;
-        combined[sym] = {
-          changePercent: (price != null && prevClose != null && prevClose !== 0)
-            ? ((price - prevClose) / prevClose) * 100 : null,
-          price,
-        };
-      }
-    } catch { combined[sym] = { changePercent: null, price: null }; }
-
-    resolved++;
-    // Progressive render every 10 symbols or when an ETF symbol resolves
-    const isEtf = THEMES.some(t => t.etf === sym);
-    if (isEtf || resolved % 10 === 0) {
-      applyQuotesToThemes(combined);
-    }
-  }));
-
-  // Final render with complete data
+  // Single batch call — gets ALL symbols in 2-3 requests instead of ~300
+  const combined = await fetchBatchQuotes(allSymbols);
   applyQuotesToThemes(combined);
 }
 
@@ -1689,20 +1669,11 @@ function applyQuotesToThemes(combined) {
 
 async function loadAllHistorical() {
   const range = TF_RANGE[currentTf];
-
-  // Collect all unique symbols
   const allSymbols = [...new Set(THEMES.flatMap(t => [t.etf, ...t.holdings]))];
-  const historyMap = {};
 
-  // Fire ALL symbol requests concurrently
-  await Promise.all(allSymbols.map(async sym => {
-    try {
-      const closes = await fetchHistory(sym, range);
-      historyMap[sym] = calcChangeFromHistory(closes);
-    } catch { historyMap[sym] = null; }
-  }));
+  // Fetch history with bounded concurrency (12 at a time)
+  const historyMap = await fetchHistoryBatch(allSymbols, range, 12);
 
-  // Distribute into perfData
   for (const theme of THEMES) {
     if (!perfData[theme.id]) perfData[theme.id] = { etf: null, holdings: {}, prices: {} };
     const d = perfData[theme.id];
@@ -2083,7 +2054,7 @@ async function fetchHoldingHistory(symbol) {
   if (holdingHistory[symbol]?.loaded) return holdingHistory[symbol].closes;
   try {
     const url = `${YF_BASE}/v8/finance/chart/${symbol}?range=1y&interval=1d`;
-    const data = await fetchWithProxyThrottled(url);
+    const data = await fetchRaw(url);
     const closes = (data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? []).filter(v => v != null);
     holdingHistory[symbol] = { closes, loaded: true };
     return closes;
@@ -2143,13 +2114,12 @@ async function loadBreadth(force = false) {
   for (const k of Object.keys(holdingHistory)) delete holdingHistory[k];
   renderBreadth();
 
-  // Fetch 1y history for all holdings in batches, compute progressively
-  const BATCH = 5;
+  // Fetch 1y history for all holdings with higher concurrency, compute progressively
+  const BATCH = 15;
   for (let i = 0; i < ALL_HOLDING_SYMS.length; i += BATCH) {
     const batch = ALL_HOLDING_SYMS.slice(i, i + BATCH);
     await Promise.all(batch.map(sym => fetchHoldingHistory(sym)));
     recomputeBreadthFromCache();
-    await sleep(150);
   }
 
   breadthState.lastComputed = Date.now();
@@ -2262,46 +2232,55 @@ function renderWatchlist() {
 async function loadWatchlist() {
   const allSyms = [...new Set(WATCHLIST.flatMap(g => g.tickers))];
 
-  await Promise.all(allSyms.map(async sym => {
-    try {
-      // Use two requests in parallel:
-      // (A) range=1d interval=1d  → meta.regularMarketPrice + meta.chartPreviousClose = reliable 1D %
-      // (B) range=1y interval=1d  → daily closes for 5D % and 52W high
-      const [data1d, data1y] = await Promise.all([
-        fetchWithProxyThrottled(`${YF_BASE}/v8/finance/chart/${sym}?range=1d&interval=1d`),
-        fetchWithProxyThrottled(`${YF_BASE}/v8/finance/chart/${sym}?range=1y&interval=1d`),
-      ]);
+  // Step 1: batch quote for 1D % (single request)
+  const quotes = await fetchBatchQuotes(allSyms).catch(() => ({}));
 
-      // ── 1D %: live price vs chartPreviousClose from meta (most reliable) ──
-      let d1 = null;
-      const meta1d = data1d?.chart?.result?.[0]?.meta;
-      if (meta1d) {
-        const livePrice = meta1d.regularMarketPrice;
-        const prevClose = meta1d.chartPreviousClose ?? meta1d.previousClose;
-        if (livePrice != null && prevClose != null && prevClose !== 0) {
-          d1 = ((livePrice - prevClose) / prevClose) * 100;
+  // Step 2: 1y history for 5D % and 52W high — run with bounded concurrency
+  const historyResults = await fetchHistoryBatch(allSyms, '1y', 10);
+
+  for (const sym of allSyms) {
+    const q = quotes[sym] ?? {};
+    const closes1y = (() => {
+      // fetchHistoryBatch returns the change %, not closes — we need raw closes here
+      // so we cached them in holdingHistory during breadth. Use that if available.
+      return holdingHistory[sym]?.closes ?? [];
+    })();
+
+    const d1 = q.changePercent ?? null;
+    const livePrice = q.price ?? null;
+
+    let d5 = null, offHigh = null;
+    // We need raw closes — re-fetch just the 1y history for watchlist symbols
+    // (these are small tickers, 30 total, so 30 requests is fine with concurrency=10)
+    wlData[sym] = { d1, d5, offHigh };
+  }
+
+  // Now fetch 1y raw closes for 5D and 52W (in parallel, 10 at a time)
+  let wi = 0;
+  const wWorker = async () => {
+    while (wi < allSyms.length) {
+      const sym = allSyms[wi++];
+      try {
+        const url = `${YF_BASE}/v8/finance/chart/${sym}?range=1y&interval=1d`;
+        const data = await fetchRaw(url);
+        const closes = (data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? []).filter(v => v != null);
+        const livePrice = wlData[sym]?.d1 != null ? (quotes[sym]?.price ?? null) : null;
+        const price = livePrice ?? closes[closes.length - 1];
+
+        if (closes.length >= 2 && price != null) {
+          const close5ago = closes.length >= 6 ? closes[closes.length - 6] : closes[0];
+          const high52 = Math.max(...closes.slice(-252));
+          wlData[sym] = {
+            d1: wlData[sym]?.d1 ?? null,
+            d5: close5ago > 0 ? ((price - close5ago) / close5ago) * 100 : null,
+            offHigh: high52 > 0 ? ((price - high52) / high52) * 100 : null,
+          };
         }
-      }
-
-      // ── 5D % and 52W high: from 1y daily closes ──
-      let d5 = null, offHigh = null;
-      const meta1y    = data1y?.chart?.result?.[0]?.meta;
-      const closes1y  = (data1y?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? []).filter(v => v != null);
-      const livePrice = meta1d?.regularMarketPrice ?? meta1y?.regularMarketPrice;
-
-      if (closes1y.length >= 2 && livePrice != null) {
-        // 5D: price 5 trading sessions ago = closes1y[-6] (index -1 is today's session close)
-        const close5ago = closes1y.length >= 6 ? closes1y[closes1y.length - 6] : closes1y[0];
-        if (close5ago && close5ago !== 0) d5 = ((livePrice - close5ago) / close5ago) * 100;
-
-        // 52W high: max of last 252 daily closes
-        const high52 = Math.max(...closes1y.slice(-252));
-        if (high52 > 0) offHigh = ((livePrice - high52) / high52) * 100;
-      }
-
-      wlData[sym] = { d1, d5, offHigh };
-    } catch { /* skip failed symbols */ }
-  }));
+        renderWatchlist(); // progressive update
+      } catch { /* skip */ }
+    }
+  };
+  await Promise.all(Array.from({ length: 10 }, wWorker));
 
   renderWatchlist();
 }
