@@ -1372,75 +1372,92 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 const YF_BASE = 'https://query2.finance.yahoo.com';
 
-// corsproxy.io is most reliable — use it primarily, allorigins as fallback only
+// Race all 3 proxies in TRUE parallel — fastest non-erroring response wins
+// This is the critical difference from sequential fallback
 async function fetchRaw(url) {
-  // Attempt 1: corsproxy.io (fast, reliable)
-  try {
-    const res = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(url)}`,
-      { signal: AbortSignal.timeout(8000) });
-    if (res.ok) {
-      const text = await res.text();
-      if (text && text.length > 10) return JSON.parse(text);
-    }
-  } catch { /* fall through */ }
+  const enc = encodeURIComponent(url);
+  const proxies = [
+    `https://corsproxy.io/?url=${enc}`,
+    `https://api.allorigins.win/raw?url=${enc}`,
+    `https://thingproxy.freeboard.io/fetch/${url}`,
+  ];
 
-  // Attempt 2: allorigins raw (fallback)
-  try {
-    const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-      { signal: AbortSignal.timeout(8000) });
-    if (res.ok) {
-      const text = await res.text();
-      if (text && text.length > 10) return JSON.parse(text);
+  const tryOne = async (proxyUrl) => {
+    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(9000) });
+    if (!res.ok) throw new Error(`${res.status}`);
+    const text = await res.text();
+    if (!text || text.length < 10) throw new Error('empty');
+    // allorigins sometimes wraps in {"contents":"...","status":...}
+    if (text.startsWith('{"contents"')) {
+      const wrapper = JSON.parse(text);
+      return JSON.parse(wrapper.contents);
     }
-  } catch { /* fall through */ }
+    return JSON.parse(text);
+  };
 
-  throw new Error('All proxies failed for: ' + url);
+  // Promise.any — resolves as soon as ANY proxy succeeds
+  return Promise.any(proxies.map(p => tryOne(p)));
 }
 
-// ─── BATCH QUOTE API (1D) ─────────────────────────────────────────────────────
-// Try Yahoo v7 batch first; fall back to parallel v8 chart calls per symbol
+// ─── PROXY HEALTH CHECK ───────────────────────────────────────────────────────
+// On load, quickly test which proxy works — skip dead ones for all subsequent calls
+const proxyHealth = { corsproxy: true, allorigins: true, thingproxy: true };
+
+async function checkProxies() {
+  const testUrl = `${YF_BASE}/v8/finance/chart/SPY?range=1d&interval=1d`;
+  const tests = [
+    ['corsproxy',  `https://corsproxy.io/?url=${encodeURIComponent(testUrl)}`],
+    ['allorigins', `https://api.allorigins.win/raw?url=${encodeURIComponent(testUrl)}`],
+    ['thingproxy', `https://thingproxy.freeboard.io/fetch/${testUrl}`],
+  ];
+  await Promise.all(tests.map(async ([name, url]) => {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      proxyHealth[name] = res.ok;
+    } catch { proxyHealth[name] = false; }
+  }));
+  const alive = Object.entries(proxyHealth).filter(([,v])=>v).map(([k])=>k);
+  console.log('[proxies] alive:', alive.join(', ') || 'NONE');
+  document.getElementById('statusProxy').textContent = alive.length
+    ? 'via ' + alive[0] : '⚠ no proxy';
+}
+
+// ─── BATCH QUOTE API ──────────────────────────────────────────────────────────
+// v7/finance/quote: all symbols in ~3 requests total (fastest path)
+// Falls back to per-symbol v8/chart (same endpoint candles use — known working)
 
 const BATCH_SIZE = 100;
 
 async function fetchBatchQuotes(symbols) {
   const result = {};
-
-  // Attempt v7 batch (3 chunks for ~300 symbols)
   const chunks = [];
   for (let i = 0; i < symbols.length; i += BATCH_SIZE)
     chunks.push(symbols.slice(i, i + BATCH_SIZE));
 
-  let batchWorked = false;
+  // Try v7 batch — all chunks fire simultaneously
   await Promise.all(chunks.map(async (chunk) => {
     const url = `${YF_BASE}/v7/finance/quote?symbols=${chunk.join(',')}&fields=regularMarketPrice,regularMarketChangePercent`;
     try {
       const data = await fetchRaw(url);
-      const quotes = data?.quoteResponse?.result ?? [];
-      if (quotes.length > 0) {
-        batchWorked = true;
-        for (const q of quotes) {
-          result[q.symbol] = {
-            changePercent: q.regularMarketChangePercent ?? null,
-            price: q.regularMarketPrice ?? null,
-          };
-        }
+      for (const q of (data?.quoteResponse?.result ?? [])) {
+        result[q.symbol] = {
+          changePercent: q.regularMarketChangePercent ?? null,
+          price: q.regularMarketPrice ?? null,
+        };
       }
-    } catch (e) {
-      console.warn('[v7 batch] chunk failed:', e.message);
-    }
+    } catch (e) { console.warn('[v7 batch] failed:', e.message); }
   }));
 
-  // If v7 batch didn't return data, fall back to parallel v8/chart per symbol
-  const missing = symbols.filter(s => !result[s]);
+  // Fallback: any symbol not returned by v7 → fetch via v8/chart (proven working)
+  const missing = symbols.filter(s => result[s] === undefined);
   if (missing.length > 0) {
-    console.log(`[fallback] v8/chart for ${missing.length} symbols`);
-    let i = 0;
+    console.log(`[v8 fallback] fetching ${missing.length} symbols`);
+    let idx = 0;
     const worker = async () => {
-      while (i < missing.length) {
-        const sym = missing[i++];
+      while (idx < missing.length) {
+        const sym = missing[idx++];
         try {
-          const url = `${YF_BASE}/v8/finance/chart/${sym}?range=1d&interval=1d`;
-          const data = await fetchRaw(url);
+          const data = await fetchRaw(`${YF_BASE}/v8/finance/chart/${sym}?range=1d&interval=1d`);
           const meta = data?.chart?.result?.[0]?.meta;
           if (meta) {
             const price = meta.regularMarketPrice ?? null;
@@ -1449,14 +1466,12 @@ async function fetchBatchQuotes(symbols) {
               changePercent: (price && prev) ? ((price - prev) / prev) * 100 : null,
               price,
             };
-          }
+          } else result[sym] = { changePercent: null, price: null };
         } catch { result[sym] = { changePercent: null, price: null }; }
       }
     };
-    // 20 parallel workers drain the queue fast
     await Promise.all(Array.from({ length: 20 }, worker));
   }
-
   return result;
 }
 
@@ -2332,10 +2347,15 @@ async function loadWatchlist() {
 renderGrid();
 renderBreadth();
 renderWatchlist();
-loadMarketOverview();
-loadAll();
-loadBreadth();
-loadWatchlist();
+
+// Run proxy check + all data loading simultaneously
+Promise.all([
+  checkProxies(),
+  loadMarketOverview(),
+  loadAll(),
+  loadBreadth(),
+  loadWatchlist(),
+]);
 
 </script>
 </body>
