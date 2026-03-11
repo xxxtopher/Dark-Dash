@@ -1366,73 +1366,101 @@ const THEMES = [
   }
 ];
 
-// ─── CORS PROXY ───────────────────────────────────────────────────────────────
+// ─── FETCH LAYER ──────────────────────────────────────────────────────────────
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 const YF_BASE = 'https://query2.finance.yahoo.com';
 
-// Two proxies tried in parallel — first response wins
+// corsproxy.io is most reliable — use it primarily, allorigins as fallback only
 async function fetchRaw(url) {
-  const proxied1 = `https://corsproxy.io/?url=${encodeURIComponent(url)}`;
-  const proxied2 = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-
-  // Race both proxies — whichever responds first wins
-  const tryFetch = async (proxyUrl) => {
-    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
-    if (!text || text.length < 10) throw new Error('Empty');
-    return JSON.parse(text);
-  };
-
-  // Try proxy1 first; if it fails within 3s fall back to proxy2 racing alongside
+  // Attempt 1: corsproxy.io (fast, reliable)
   try {
-    return await Promise.any([
-      tryFetch(proxied1),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('slow')), 3000))
-        .catch(() => tryFetch(proxied2))
-    ]);
-  } catch {
-    // Last resort: try proxy2 directly
-    return await tryFetch(proxied2);
-  }
+    const res = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+      { signal: AbortSignal.timeout(8000) });
+    if (res.ok) {
+      const text = await res.text();
+      if (text && text.length > 10) return JSON.parse(text);
+    }
+  } catch { /* fall through */ }
+
+  // Attempt 2: allorigins raw (fallback)
+  try {
+    const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+      { signal: AbortSignal.timeout(8000) });
+    if (res.ok) {
+      const text = await res.text();
+      if (text && text.length > 10) return JSON.parse(text);
+    }
+  } catch { /* fall through */ }
+
+  throw new Error('All proxies failed for: ' + url);
 }
 
 // ─── BATCH QUOTE API (1D) ─────────────────────────────────────────────────────
-// Yahoo v7 /quote returns price + changePercent for up to ~200 symbols in ONE request
+// Try Yahoo v7 batch first; fall back to parallel v8 chart calls per symbol
 
-const BATCH_SIZE = 120; // safe batch size for the query string
+const BATCH_SIZE = 100;
 
 async function fetchBatchQuotes(symbols) {
-  // Returns { [symbol]: { changePercent, price } }
   const result = {};
+
+  // Attempt v7 batch (3 chunks for ~300 symbols)
   const chunks = [];
   for (let i = 0; i < symbols.length; i += BATCH_SIZE)
     chunks.push(symbols.slice(i, i + BATCH_SIZE));
 
+  let batchWorked = false;
   await Promise.all(chunks.map(async (chunk) => {
-    const syms = chunk.join(',');
-    const url = `${YF_BASE}/v7/finance/quote?symbols=${encodeURIComponent(syms)}&fields=regularMarketPrice,regularMarketChangePercent`;
+    const url = `${YF_BASE}/v7/finance/quote?symbols=${chunk.join(',')}&fields=regularMarketPrice,regularMarketChangePercent`;
     try {
       const data = await fetchRaw(url);
       const quotes = data?.quoteResponse?.result ?? [];
-      for (const q of quotes) {
-        result[q.symbol] = {
-          changePercent: q.regularMarketChangePercent ?? null,
-          price: q.regularMarketPrice ?? null,
-        };
+      if (quotes.length > 0) {
+        batchWorked = true;
+        for (const q of quotes) {
+          result[q.symbol] = {
+            changePercent: q.regularMarketChangePercent ?? null,
+            price: q.regularMarketPrice ?? null,
+          };
+        }
       }
     } catch (e) {
-      console.warn('Batch quote failed for chunk', chunk[0], e.message);
+      console.warn('[v7 batch] chunk failed:', e.message);
     }
   }));
+
+  // If v7 batch didn't return data, fall back to parallel v8/chart per symbol
+  const missing = symbols.filter(s => !result[s]);
+  if (missing.length > 0) {
+    console.log(`[fallback] v8/chart for ${missing.length} symbols`);
+    let i = 0;
+    const worker = async () => {
+      while (i < missing.length) {
+        const sym = missing[i++];
+        try {
+          const url = `${YF_BASE}/v8/finance/chart/${sym}?range=1d&interval=1d`;
+          const data = await fetchRaw(url);
+          const meta = data?.chart?.result?.[0]?.meta;
+          if (meta) {
+            const price = meta.regularMarketPrice ?? null;
+            const prev  = meta.chartPreviousClose ?? meta.previousClose ?? null;
+            result[sym] = {
+              changePercent: (price && prev) ? ((price - prev) / prev) * 100 : null,
+              price,
+            };
+          }
+        } catch { result[sym] = { changePercent: null, price: null }; }
+      }
+    };
+    // 20 parallel workers drain the queue fast
+    await Promise.all(Array.from({ length: 20 }, worker));
+  }
 
   return result;
 }
 
 // ─── HISTORICAL (5D / 1M / YTD) ───────────────────────────────────────────────
-// Fetches individual chart history — but only for ETFs + holdings, batched by time
 
 async function fetchHistory(symbol, range) {
   const url = `${YF_BASE}/v8/finance/chart/${symbol}?range=${range}&interval=1d`;
@@ -1448,8 +1476,8 @@ function calcChangeFromHistory(closes) {
   return ((last - first) / first) * 100;
 }
 
-// Fetch history for many symbols with capped concurrency (avoid proxy hammering)
-async function fetchHistoryBatch(symbols, range, concurrency = 12) {
+// Worker-pool pattern: N workers drain a shared queue — true parallel with cap
+async function fetchHistoryBatch(symbols, range, concurrency = 20) {
   const results = {};
   let i = 0;
   const worker = async () => {
@@ -1465,7 +1493,7 @@ async function fetchHistoryBatch(symbols, range, concurrency = 12) {
   return results;
 }
 
-// Single-symbol chart fetch (for intraday candles, watchlist 1y, breadth)
+// Aliases kept for candlestick / breadth callers
 async function fetchWithProxy(url) { return fetchRaw(url); }
 async function fetchWithProxyThrottled(url) { return fetchRaw(url); }
 
@@ -1671,23 +1699,51 @@ async function loadAllHistorical() {
   const range = TF_RANGE[currentTf];
   const allSymbols = [...new Set(THEMES.flatMap(t => [t.etf, ...t.holdings]))];
 
-  // Fetch history with bounded concurrency (12 at a time)
-  const historyMap = await fetchHistoryBatch(allSymbols, range, 12);
+  // All ETF symbols first (priority) so theme cards fill in quickly
+  const etfSyms = [...new Set(THEMES.map(t => t.etf))];
+  const holdingSyms = allSymbols.filter(s => !etfSyms.includes(s));
+  const ordered = [...etfSyms, ...holdingSyms];
 
+  const historyMap = {};
+  let i = 0;
+  const worker = async () => {
+    while (i < ordered.length) {
+      const sym = ordered[i++];
+      try {
+        const closes = await fetchHistory(sym, range);
+        historyMap[sym] = calcChangeFromHistory(closes);
+      } catch { historyMap[sym] = null; }
+      // Progressive render every time an ETF resolves or every 15 symbols
+      const isEtf = etfSyms.includes(sym);
+      if (isEtf || i % 15 === 0) {
+        for (const theme of THEMES) {
+          if (!perfData[theme.id]) perfData[theme.id] = { etf: null, holdings: {}, prices: {} };
+          const d = perfData[theme.id];
+          if (historyMap[theme.etf] !== undefined) d.etf = historyMap[theme.etf] ?? null;
+          for (const s of theme.holdings) {
+            if (historyMap[s] !== undefined) d.holdings[s] = historyMap[s] ?? null;
+          }
+        }
+        loadedCount = THEMES.filter(t => perfData[t.id]?.etf != null).length;
+        updateStatusBar();
+        renderGrid();
+        renderThemeRanking();
+        renderStockRanking();
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: 20 }, worker));
+
+  // Final pass to catch any stragglers
   for (const theme of THEMES) {
     if (!perfData[theme.id]) perfData[theme.id] = { etf: null, holdings: {}, prices: {} };
     const d = perfData[theme.id];
     d.etf = historyMap[theme.etf] ?? null;
-    for (const sym of theme.holdings) {
-      d.holdings[sym] = historyMap[sym] ?? null;
-    }
-    loadedCount++;
+    for (const sym of theme.holdings) d.holdings[sym] = historyMap[sym] ?? null;
   }
-  updateStatusBar();
-  renderGrid();
-  updateBreadthAdLine();
-  renderThemeRanking();
-  renderStockRanking();
+  loadedCount = THEMES.filter(t => perfData[t.id]?.etf != null).length;
+  updateStatusBar(); renderGrid(); updateBreadthAdLine();
+  renderThemeRanking(); renderStockRanking();
   if (currentModalTheme) renderHoldings(currentModalTheme);
 }
 
@@ -2232,56 +2288,42 @@ function renderWatchlist() {
 async function loadWatchlist() {
   const allSyms = [...new Set(WATCHLIST.flatMap(g => g.tickers))];
 
-  // Step 1: batch quote for 1D % (single request)
-  const quotes = await fetchBatchQuotes(allSyms).catch(() => ({}));
+  // Initialise with blanks so renderWatchlist shows placeholders immediately
+  for (const sym of allSyms) wlData[sym] = { d1: null, d5: null, offHigh: null };
+  renderWatchlist();
 
-  // Step 2: 1y history for 5D % and 52W high — run with bounded concurrency
-  const historyResults = await fetchHistoryBatch(allSyms, '1y', 10);
+  // Step 1: batch-quote all watchlist symbols for 1D % (1 request)
+  try {
+    const quotes = await fetchBatchQuotes(allSyms);
+    for (const sym of allSyms) {
+      if (quotes[sym]) wlData[sym].d1 = quotes[sym].changePercent ?? null;
+    }
+    renderWatchlist();
+  } catch (e) { console.warn('WL batch quote failed', e.message); }
 
-  for (const sym of allSyms) {
-    const q = quotes[sym] ?? {};
-    const closes1y = (() => {
-      // fetchHistoryBatch returns the change %, not closes — we need raw closes here
-      // so we cached them in holdingHistory during breadth. Use that if available.
-      return holdingHistory[sym]?.closes ?? [];
-    })();
-
-    const d1 = q.changePercent ?? null;
-    const livePrice = q.price ?? null;
-
-    let d5 = null, offHigh = null;
-    // We need raw closes — re-fetch just the 1y history for watchlist symbols
-    // (these are small tickers, 30 total, so 30 requests is fine with concurrency=10)
-    wlData[sym] = { d1, d5, offHigh };
-  }
-
-  // Now fetch 1y raw closes for 5D and 52W (in parallel, 10 at a time)
+  // Step 2: fetch 1y history for 5D% and 52W-high — 10 parallel workers
   let wi = 0;
-  const wWorker = async () => {
+  const worker = async () => {
     while (wi < allSyms.length) {
       const sym = allSyms[wi++];
       try {
         const url = `${YF_BASE}/v8/finance/chart/${sym}?range=1y&interval=1d`;
         const data = await fetchRaw(url);
-        const closes = (data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? []).filter(v => v != null);
-        const livePrice = wlData[sym]?.d1 != null ? (quotes[sym]?.price ?? null) : null;
-        const price = livePrice ?? closes[closes.length - 1];
-
-        if (closes.length >= 2 && price != null) {
-          const close5ago = closes.length >= 6 ? closes[closes.length - 6] : closes[0];
+        const raw = data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? [];
+        const closes = raw.filter(v => v != null);
+        const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice
+                   ?? closes[closes.length - 1];
+        if (closes.length >= 6 && price != null) {
+          const close5ago = closes[closes.length - 6];
           const high52 = Math.max(...closes.slice(-252));
-          wlData[sym] = {
-            d1: wlData[sym]?.d1 ?? null,
-            d5: close5ago > 0 ? ((price - close5ago) / close5ago) * 100 : null,
-            offHigh: high52 > 0 ? ((price - high52) / high52) * 100 : null,
-          };
+          wlData[sym].d5 = close5ago > 0 ? ((price - close5ago) / close5ago) * 100 : null;
+          wlData[sym].offHigh = high52 > 0 ? ((price - high52) / high52) * 100 : null;
         }
-        renderWatchlist(); // progressive update
+        renderWatchlist();
       } catch { /* skip */ }
     }
   };
-  await Promise.all(Array.from({ length: 10 }, wWorker));
-
+  await Promise.all(Array.from({ length: 10 }, worker));
   renderWatchlist();
 }
 
