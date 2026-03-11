@@ -1146,8 +1146,8 @@
 
 <div class="status-bar">
   <div class="status-left">
-    <div class="status-item">THEMES <span id="statusLoaded">0</span>/23</div>
-    <div class="status-item">SOURCE <span>YAHOO FINANCE</span></div>
+    <div class="status-item">THEMES <span id="statusLoaded">0</span>/26</div>
+    <div class="status-item">SOURCE <span>YAHOO FINANCE</span> · <span id="statusProxy">via corsproxy.io</span></div>
   </div>
   <div class="status-item">DATA MAY BE DELAYED 15–20 MIN</div>
 </div>
@@ -1371,25 +1371,70 @@ const THEMES = [
 const PROXIES = [
   url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
   url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  url => `https://thingproxy.freeboard.io/fetch/${url}`,
+  url => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(url)}`,
 ];
 
 let activeProxy = 0;
+const proxyFailCount = new Array(PROXIES.length).fill(0);
 
-async function fetchWithProxy(url) {
-  for (let i = 0; i < PROXIES.length; i++) {
-    const proxyIdx = (activeProxy + i) % PROXIES.length;
-    try {
-      const proxied = PROXIES[proxyIdx](url);
-      const res = await fetch(proxied, { signal: AbortSignal.timeout(8000) });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      activeProxy = proxyIdx;
-      return data;
-    } catch (e) {
-      if (i === PROXIES.length - 1) throw e;
+async function fetchWithProxy(url, retries = 2) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    // cycle through proxies — prefer less-failed ones
+    for (let i = 0; i < PROXIES.length; i++) {
+      const proxyIdx = (activeProxy + i) % PROXIES.length;
+      // skip proxies with too many recent failures
+      if (proxyFailCount[proxyIdx] > 5 && i < PROXIES.length - 1) continue;
+      try {
+        const proxied = PROXIES[proxyIdx](url);
+        const res = await fetch(proxied, { signal: AbortSignal.timeout(12000) });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const text = await res.text();
+        if (!text || text.trim() === '') throw new Error('Empty response');
+        const data = JSON.parse(text);
+        // success — reset fail count and lock to this proxy
+        proxyFailCount[proxyIdx] = Math.max(0, proxyFailCount[proxyIdx] - 1);
+        activeProxy = proxyIdx;
+        return data;
+      } catch (e) {
+        proxyFailCount[(activeProxy + i) % PROXIES.length]++;
+        if (i === PROXIES.length - 1 && attempt === retries) throw e;
+      }
     }
+    if (attempt < retries) await sleep(300 * (attempt + 1));
   }
 }
+
+// ─── REQUEST THROTTLE ─────────────────────────────────────────────────────────
+// Limits concurrent outgoing requests to avoid overwhelming proxies
+
+const MAX_CONCURRENT = 8;
+let activeRequests = 0;
+const requestQueue = [];
+
+function throttledFetch(fn) {
+  return new Promise((resolve, reject) => {
+    const task = async () => {
+      activeRequests++;
+      try {
+        resolve(await fn());
+      } catch (e) {
+        reject(e);
+      } finally {
+        activeRequests--;
+        if (requestQueue.length > 0) requestQueue.shift()();
+      }
+    };
+    if (activeRequests < MAX_CONCURRENT) task();
+    else requestQueue.push(task);
+  });
+}
+
+async function fetchWithProxyThrottled(url) {
+  return throttledFetch(() => fetchWithProxy(url));
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // ─── YAHOO FINANCE ────────────────────────────────────────────────────────────
 
@@ -1398,7 +1443,7 @@ const YF_BASE = 'https://query2.finance.yahoo.com';
 async function fetchHistory(symbol, range) {
   // range: '5d', '1mo', 'ytd'
   const url = `${YF_BASE}/v8/finance/chart/${symbol}?range=${range}&interval=1d`;
-  const data = await fetchWithProxy(url);
+  const data = await fetchWithProxyThrottled(url);
   const closes = data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close;
   return closes || [];
 }
@@ -1499,6 +1544,10 @@ function renderGrid() {
 
 function updateStatusBar() {
   document.getElementById('statusLoaded').textContent = loadedCount;
+  // Show which proxy is active
+  const proxyNames = ['corsproxy.io', 'allorigins.win', 'thingproxy', 'codetabs'];
+  const pEl = document.getElementById('statusProxy');
+  if (pEl) pEl.textContent = 'via ' + (proxyNames[activeProxy] || 'proxy');
 }
 
 // ─── MODAL ────────────────────────────────────────────────────────────────────
@@ -1586,25 +1635,35 @@ async function loadAll1D() {
   // Collect all unique symbols across all themes
   const allSymbols = [...new Set(THEMES.flatMap(t => [t.etf, ...t.holdings]))];
   const combined = {};
+  let resolved = 0;
 
-  // Fire ALL requests concurrently — no batching, no sleeps
-  // Use interval=1d (tiny response) instead of 5m
+  // Fire all requests through throttle — renders progressively as each ETF symbol resolves
   await Promise.all(allSymbols.map(async sym => {
     try {
       const url = `${YF_BASE}/v8/finance/chart/${sym}?range=1d&interval=1d`;
-      const data = await fetchWithProxy(url);
+      const data = await fetchWithProxyThrottled(url);
       const meta = data?.chart?.result?.[0]?.meta;
-      if (!meta) { combined[sym] = { changePercent: null, price: null }; return; }
-      const price     = meta.regularMarketPrice ?? null;
-      const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? null;
-      combined[sym] = {
-        changePercent: (price != null && prevClose != null && prevClose !== 0)
-          ? ((price - prevClose) / prevClose) * 100 : null,
-        price,
-      };
+      if (!meta) { combined[sym] = { changePercent: null, price: null }; }
+      else {
+        const price     = meta.regularMarketPrice ?? null;
+        const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? null;
+        combined[sym] = {
+          changePercent: (price != null && prevClose != null && prevClose !== 0)
+            ? ((price - prevClose) / prevClose) * 100 : null,
+          price,
+        };
+      }
     } catch { combined[sym] = { changePercent: null, price: null }; }
+
+    resolved++;
+    // Progressive render every 10 symbols or when an ETF symbol resolves
+    const isEtf = THEMES.some(t => t.etf === sym);
+    if (isEtf || resolved % 10 === 0) {
+      applyQuotesToThemes(combined);
+    }
   }));
 
+  // Final render with complete data
   applyQuotesToThemes(combined);
 }
 
@@ -1661,8 +1720,6 @@ async function loadAllHistorical() {
   if (currentModalTheme) renderHoldings(currentModalTheme);
 }
 
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
 async function loadAll() {
   loadedCount = 0;
   updateStatusBar();
@@ -1687,7 +1744,7 @@ async function loadAll() {
 async function fetchIndexIntraday(symbol) {
   // Fetch today's 5-min intraday OHLC data
   const url = `${YF_BASE}/v8/finance/chart/${symbol}?range=1d&interval=5m`;
-  const data = await fetchWithProxy(url);
+  const data = await fetchWithProxyThrottled(url);
   const result = data?.chart?.result?.[0];
   if (!result) return null;
   const meta       = result.meta;
@@ -2026,7 +2083,7 @@ async function fetchHoldingHistory(symbol) {
   if (holdingHistory[symbol]?.loaded) return holdingHistory[symbol].closes;
   try {
     const url = `${YF_BASE}/v8/finance/chart/${symbol}?range=1y&interval=1d`;
-    const data = await fetchWithProxy(url);
+    const data = await fetchWithProxyThrottled(url);
     const closes = (data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? []).filter(v => v != null);
     holdingHistory[symbol] = { closes, loaded: true };
     return closes;
@@ -2211,8 +2268,8 @@ async function loadWatchlist() {
       // (A) range=1d interval=1d  → meta.regularMarketPrice + meta.chartPreviousClose = reliable 1D %
       // (B) range=1y interval=1d  → daily closes for 5D % and 52W high
       const [data1d, data1y] = await Promise.all([
-        fetchWithProxy(`${YF_BASE}/v8/finance/chart/${sym}?range=1d&interval=1d`),
-        fetchWithProxy(`${YF_BASE}/v8/finance/chart/${sym}?range=1y&interval=1d`),
+        fetchWithProxyThrottled(`${YF_BASE}/v8/finance/chart/${sym}?range=1d&interval=1d`),
+        fetchWithProxyThrottled(`${YF_BASE}/v8/finance/chart/${sym}?range=1y&interval=1d`),
       ]);
 
       // ── 1D %: live price vs chartPreviousClose from meta (most reliable) ──
