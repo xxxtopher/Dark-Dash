@@ -293,40 +293,29 @@ const THEMES = [
 ];
 
 // ─── FETCH ────────────────────────────────────────────────────────────────────
-// allorigins.win is a free proxy — it works but throttles heavy concurrent load.
-// We use a concurrency limiter: max 4 in-flight at once, 80ms gap between starts.
-// This keeps allorigins happy and loads all 26 ETFs in ~8-10 seconds reliably.
+// Fully parallel — allorigins handles 20+ concurrent fine (confirmed in diagnostics).
+// Yahoo Finance occasionally returns 429/empty for some symbols under load.
+// Retry once after a short delay to catch those transient failures.
 
 const YF_BASE = 'https://query2.finance.yahoo.com';
 const PROXY   = 'https://api.allorigins.win/raw?url=';
 
-// Concurrency limiter
-const MAX_CONCURRENT = 4;
-let _inFlight = 0;
-const _queue = [];
-function _runNext() {
-  if (_inFlight >= MAX_CONCURRENT || _queue.length === 0) return;
-  const { fn, resolve, reject } = _queue.shift();
-  _inFlight++;
-  fn().then(resolve, reject).finally(() => { _inFlight--; _runNext(); });
-}
-function throttled(fn) {
-  return new Promise((resolve, reject) => {
-    _queue.push({ fn, resolve, reject });
-    _runNext();
-  });
-}
-
-async function _doFetch(url) {
-  const res = await fetch(PROXY + encodeURIComponent(url), { signal: AbortSignal.timeout(15000) });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const text = await res.text();
-  if (!text || text.length < 20) throw new Error('empty response');
-  return JSON.parse(text);
-}
-
-function fetchOne(url) {
-  return throttled(() => _doFetch(url));
+async function fetchOne(url, attempt = 0) {
+  try {
+    const res = await fetch(PROXY + encodeURIComponent(url), { signal: AbortSignal.timeout(15000) });
+    if (res.status === 429 || res.status === 503) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    if (!text || text.length < 20) throw new Error('empty');
+    return JSON.parse(text);
+  } catch (e) {
+    if (attempt === 0) {
+      // Wait 1.5s then retry once
+      await new Promise(r => setTimeout(r, 1500));
+      return fetchOne(url, 1);
+    }
+    throw e;
+  }
 }
 
 async function fetchQuote1D(sym) {
@@ -455,12 +444,13 @@ async function loadAll() {
   const btn = document.getElementById('refreshBtn');
   btn.classList.add('loading');
 
+  // First pass — fully parallel
   await Promise.all(THEMES.map(async theme => {
     try {
       const q = await fetchQuote1D(theme.etf);
       etfPerf[theme.id] = { pct: q.changePercent, price: q.price };
     } catch(e) {
-      console.warn('[etf]', theme.etf, e.message);
+      console.warn('[etf fail]', theme.etf, e.message);
       etfPerf[theme.id] = { pct: null, price: null };
     }
     loadedCount = Object.values(etfPerf).filter(d => d?.pct != null).length;
@@ -468,6 +458,24 @@ async function loadAll() {
     renderBarChart();
     renderThemeRanking();
   }));
+
+  // Second pass — retry any that came back null (Yahoo sometimes drops a few)
+  const nullThemes = THEMES.filter(t => etfPerf[t.id]?.pct == null);
+  if (nullThemes.length > 0) {
+    console.log('[retry]', nullThemes.map(t => t.etf).join(', '));
+    await Promise.all(nullThemes.map(async theme => {
+      try {
+        const q = await fetchQuote1D(theme.etf);
+        etfPerf[theme.id] = { pct: q.changePercent, price: q.price };
+      } catch(e) {
+        console.warn('[etf retry fail]', theme.etf, e.message);
+      }
+      loadedCount = Object.values(etfPerf).filter(d => d?.pct != null).length;
+      document.getElementById('statusLoaded').textContent = loadedCount;
+      renderBarChart();
+      renderThemeRanking();
+    }));
+  }
 
   btn.classList.remove('loading');
   document.getElementById('lastUpdate').textContent =
@@ -741,7 +749,8 @@ async function loadWatchlist() {
 document.getElementById('refreshBtn').addEventListener('click', () => {
   for (const k of Object.keys(etfPerf)) delete etfPerf[k];
   loadMarketOverview();
-  loadAll().then(() => loadWatchlist());
+  loadAll();
+  loadWatchlist();
   if (breadthVisible) loadBreadth(true);
 });
 
@@ -749,9 +758,10 @@ document.getElementById('refreshBtn').addEventListener('click', () => {
 renderBarChart();
 renderWatchlist();
 
-// 28 requests on load; watchlist fires after
-Promise.all([loadMarketOverview(), loadAll()])
-  .then(() => loadWatchlist());
+// All parallel — fetchOne has built-in retry so no ordering dependency needed
+loadMarketOverview();
+loadAll();
+loadWatchlist();
 
 </script>
 </body>
