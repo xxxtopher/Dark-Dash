@@ -302,15 +302,12 @@ const YF_BASE = 'https://query2.finance.yahoo.com';
 const PROXY   = url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
 
 let _queueTail = Promise.resolve();
-let _reqCount = 0;
 
 function fetchOne(url) {
-  _reqCount++;
-  const needsPause = _reqCount % 10 === 0;
+  // 200ms minimum gap between requests — allorigins drops requests
+  // if hammered continuously even sequentially beyond ~12 in a row.
   const result = _queueTail.then(() =>
-    needsPause
-      ? new Promise(r => setTimeout(r, 500)).then(() => _doFetch(url))
-      : _doFetch(url)
+    new Promise(r => setTimeout(r, 200)).then(() => _doFetch(url))
   );
   _queueTail = result.catch(() => {});
   return result;
@@ -666,18 +663,16 @@ async function loadWatchlist() {
 // ─── CONTROLS ─────────────────────────────────────────────────────────────────
 document.getElementById('refreshBtn').addEventListener('click', () => {
   for (const k of Object.keys(etfPerf)) delete etfPerf[k];
-  loadMarketOverview();
-  loadAll();
-  loadWatchlist();
+  loadMarketOverview().then(() => loadAll()).then(() => loadWatchlist());
   if (breadthVisible) loadBreadth(true);
 });
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 renderBarChart();
 renderWatchlist();
-loadMarketOverview();
-loadAll();
-loadWatchlist();
+// Load in strict sequence: index candles first (they queue 2 big requests),
+// then ETFs, then watchlist — so index charts always render early.
+loadMarketOverview().then(() => loadAll()).then(() => loadWatchlist());
 
 </script>
 </body>
