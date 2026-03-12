@@ -294,46 +294,26 @@ const THEMES = [
 ];
 
 // ─── FETCH ────────────────────────────────────────────────────────────────────
-// Problem: any single CORS proxy gets rate-limited when 26+ requests hit at once.
-// Solution: rotate across 3 proxies round-robin so each proxy only handles ~9 reqs.
-//           On failure, try the next proxy before giving up.
+// CONFIRMED: allorigins.win serializes requests — only 1 in-flight at a time.
+// Any concurrent requests time out. Must queue strictly sequentially.
+// 26 ETFs × ~200ms each ≈ 5-6s total. Progressive render as each comes in.
 
 const YF_BASE = 'https://query2.finance.yahoo.com';
-const PROXIES = [
-  url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
-  url => 'https://corsproxy.io/?url='          + encodeURIComponent(url),
-  url => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url),
-];
-let _proxyIdx = 0; // round-robin counter
+const PROXY   = url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
 
-async function _tryProxy(url, proxyFn) {
-  const res = await fetch(proxyFn(url), { signal: AbortSignal.timeout(10000) });
+// Serial queue — only one fetch runs at a time
+let _queue = Promise.resolve();
+function fetchOne(url) {
+  _queue = _queue.then(() => _doFetch(url));
+  return _queue;
+}
+
+async function _doFetch(url) {
+  const res = await fetch(PROXY(url), { signal: AbortSignal.timeout(10000) });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const text = await res.text();
   if (!text || text.length < 20) throw new Error('empty');
-  // codetabs wraps in {"status":"...","response":"..."} — unwrap if needed
-  if (text.startsWith('{"status"')) {
-    const w = JSON.parse(text);
-    return JSON.parse(w.response ?? w.contents ?? text);
-  }
   return JSON.parse(text);
-}
-
-async function fetchOne(url) {
-  // Try assigned proxy first, then fall through all others
-  const start = _proxyIdx++ % PROXIES.length;
-  const order = [start, (start+1)%PROXIES.length, (start+2)%PROXIES.length];
-  let lastErr;
-  for (const i of order) {
-    try {
-      return await _tryProxy(url, PROXIES[i]);
-    } catch(e) {
-      lastErr = e;
-      // brief pause before trying next proxy
-      await new Promise(r => setTimeout(r, 300));
-    }
-  }
-  throw lastErr;
 }
 
 async function fetchQuote1D(sym) {
@@ -353,18 +333,10 @@ async function fetchQuoteHistory(sym, range) {
   return closes.filter(v => v != null);
 }
 
-// Fire all tasks fully in parallel — proxy rotation spreads the load
-function parallel(items, taskFn) {
+// Queue all items — they run one at a time through fetchOne's serial queue
+// taskFn fires immediately but its internal fetchOne call waits its turn
+function enqueueAll(items, taskFn) {
   return Promise.all(items.map(item => taskFn(item)));
-}
-
-// Stagger: start each task delayMs after the previous (still concurrent)
-function staggered(items, taskFn, delayMs) {
-  return Promise.all(
-    items.map((item, i) =>
-      new Promise(r => setTimeout(r, i * delayMs)).then(() => taskFn(item))
-    )
-  );
 }
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
@@ -445,7 +417,7 @@ async function loadAll() {
   renderBarChart();
   document.getElementById('refreshBtn').classList.add('loading');
 
-  await parallel(THEMES, async (theme) => {
+  await enqueueAll(THEMES, async (theme) => {
     try {
       const q = await fetchQuote1D(theme.etf);
       etfPerf[theme.id] = { pct: q.changePercent, price: q.price };
@@ -542,11 +514,9 @@ function updateIndexUI(pfx, data) {
 }
 
 async function loadMarketOverview() {
-  // Stagger 500ms so index candles don't compete with ETF burst at t=0
   const spx = await fetchIndexIntraday('%5EGSPC').catch(()=>null);
   updateIndexUI('spx', spx);
   requestAnimationFrame(()=>{ if (spx?.candles?.length) drawCandleChart('spxChart',spx.candles,spx.prevClose); });
-  await new Promise(r => setTimeout(r, 300));
   const ndx = await fetchIndexIntraday('%5EIXIC').catch(()=>null);
   updateIndexUI('ndx', ndx);
   requestAnimationFrame(()=>{ if (ndx?.candles?.length) drawCandleChart('ndxChart',ndx.candles,ndx.prevClose); });
@@ -623,7 +593,7 @@ async function loadBreadth(force=false) {
   Object.assign(breadthState, {above20:null,above50:null,above200:null,highs:null,lows:null,lastComputed:null});
   for (const k of Object.keys(holdingHistory)) delete holdingHistory[k];
   renderBreadth();
-  await parallel(ALL_HOLDING_SYMS, async (sym) => {
+  await enqueueAll(ALL_HOLDING_SYMS, async (sym) => {
     try {
       const closes = await fetchQuoteHistory(sym,'1y');
       holdingHistory[sym] = { closes, loaded:true };
@@ -678,7 +648,7 @@ async function loadWatchlist() {
   const syms = [...new Set(WATCHLIST.flatMap(g=>g.tickers))];
   for (const sym of syms) wlData[sym] = { d1:null };
   renderWatchlist();
-  await parallel(syms, async (sym) => {
+  await enqueueAll(syms, async (sym) => {
     try {
       const q = await fetchQuote1D(sym);
       wlData[sym] = { d1: q.changePercent ?? null };
