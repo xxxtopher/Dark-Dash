@@ -2231,23 +2231,26 @@ async function loadWatchlist() {
   for (const sym of allSyms) wlData[sym] = { d1: null, d5: null, offHigh: null };
   renderWatchlist();
 
-  // Fire ALL symbols in parallel — 1D quote + 1y history simultaneously
+  // Step 1: fetch all 1D quotes in parallel (same as theme cards — proven working)
   await Promise.all(allSyms.map(async sym => {
     try {
-      // Both requests fire at the same time per symbol
-      const [q1d, closes1y] = await Promise.all([
-        fetchQuote1D(sym),
-        fetchQuoteHistory(sym, '1y'),
-      ]);
-      const price = q1d.price ?? closes1y[closes1y.length - 1] ?? null;
-      const close5ago = closes1y.length >= 6 ? closes1y[closes1y.length - 6] : null;
-      const high52 = closes1y.length > 0 ? Math.max(...closes1y.slice(-252)) : null;
-      wlData[sym] = {
-        d1: q1d.changePercent ?? null,
-        d5: (close5ago && price) ? ((price - close5ago) / close5ago) * 100 : null,
-        offHigh: (high52 && price) ? ((price - high52) / high52) * 100 : null,
-      };
-    } catch { /* keep nulls */ }
+      const q = await fetchQuote1D(sym);
+      wlData[sym].d1 = q.changePercent ?? null;
+      wlData[sym]._price = q.price ?? null;
+    } catch(e) { console.warn('[wl 1D]', sym, e.message); }
+  }));
+  renderWatchlist();
+
+  // Step 2: fetch 1y history for 5D% and 52W-high — in parallel after step 1
+  await Promise.all(allSyms.map(async sym => {
+    try {
+      const closes = await fetchQuoteHistory(sym, '1y');
+      const price = wlData[sym]._price ?? closes[closes.length - 1] ?? null;
+      const close5ago = closes.length >= 6 ? closes[closes.length - 6] : null;
+      const high52 = closes.length > 0 ? Math.max(...closes.slice(-252)) : null;
+      wlData[sym].d5 = (close5ago && price) ? ((price - close5ago) / close5ago) * 100 : null;
+      wlData[sym].offHigh = (high52 && price) ? ((price - high52) / high52) * 100 : null;
+    } catch(e) { console.warn('[wl 1y]', sym, e.message); }
     renderWatchlist();
   }));
 }
@@ -2258,14 +2261,16 @@ renderGrid();
 renderBreadth();
 renderWatchlist();
 
-// Run proxy check + all data loading simultaneously
+// Run proxy label + market overview + themes in parallel first
+// Then load watchlist + breadth after themes complete (avoids allorigins rate limit)
+checkProxies();
 Promise.all([
-  checkProxies(),
   loadMarketOverview(),
   loadAll(),
-  loadBreadth(),
-  loadWatchlist(),
-]);
+]).then(() => {
+  loadWatchlist();
+  loadBreadth();
+});
 
 </script>
 </body>
