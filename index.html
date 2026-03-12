@@ -294,18 +294,39 @@ const THEMES = [
 ];
 
 // ─── FETCH ────────────────────────────────────────────────────────────────────
-// Diagnostic confirmed: 20 concurrent allorigins requests = 20/20 ok in 135ms.
-// Pure Promise.all is the correct approach. All throttling/queuing made things worse.
+// allorigins has a per-minute quota per IP. We alternate between /raw and /get
+// endpoints to effectively double our quota. /get wraps response in JSON so we
+// unwrap it. Both endpoints confirmed working in diagnostics.
 
 const YF_BASE = 'https://query2.finance.yahoo.com';
-const PROXY   = url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
+const PROXIES = [
+  url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
+  url => 'https://api.allorigins.win/get?url=' + encodeURIComponent(url),
+];
+let _px = 0;
 
 async function fetchOne(url) {
-  const res = await fetch(PROXY(url), { signal: AbortSignal.timeout(10000) });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const text = await res.text();
-  if (!text || text.length < 20) throw new Error('empty');
-  return JSON.parse(text);
+  // Try both endpoints; alternate which one goes first
+  const order = [_px % 2, (_px + 1) % 2];
+  _px++;
+  let lastErr;
+  for (const i of order) {
+    try {
+      const res = await fetch(PROXIES[i](url), { signal: AbortSignal.timeout(10000) });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const text = await res.text();
+      if (!text || text.length < 20) throw new Error('empty');
+      // /get wraps in {"contents":"...","status":{...}}
+      if (text.startsWith('{"contents"')) {
+        const wrapped = JSON.parse(text);
+        return JSON.parse(wrapped.contents);
+      }
+      return JSON.parse(text);
+    } catch(e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr;
 }
 
 async function fetchQuote1D(sym) {
@@ -650,34 +671,18 @@ async function loadWatchlist() {
   const syms = [...new Set(WATCHLIST.flatMap(g=>g.tickers))];
   for (const sym of syms) wlData[sym] = { d1:null };
   renderWatchlist();
-
-  // Fire in two batches of 15 with a gap, to avoid competing with ETF requests
-  const batch1 = syms.slice(0, 15);
-  const batch2 = syms.slice(15);
-
-  await Promise.all(batch1.map(async (sym) => {
+  await Promise.all(syms.map(async (sym) => {
     try {
       const q = await fetchQuote1D(sym);
       wlData[sym] = { d1: q.changePercent ?? null };
     } catch(e) { wlData[sym] = { d1: null }; }
     renderWatchlist();
   }));
-
-  await new Promise(r => setTimeout(r, 1000));
-
-  await Promise.all(batch2.map(async (sym) => {
-    try {
-      const q = await fetchQuote1D(sym);
-      wlData[sym] = { d1: q.changePercent ?? null };
-    } catch(e) { wlData[sym] = { d1: null }; }
-    renderWatchlist();
-  }));
-
-  // Retry any still null
-  const failedSyms = syms.filter(s => wlData[s]?.d1 == null);
-  if (failedSyms.length) {
-    await new Promise(r => setTimeout(r, 1500));
-    await Promise.all(failedSyms.map(async (sym) => {
+  // Single retry pass for any that failed
+  const failed = syms.filter(s => wlData[s]?.d1 == null);
+  if (failed.length) {
+    await new Promise(r => setTimeout(r, 2000));
+    await Promise.all(failed.map(async (sym) => {
       try {
         const q = await fetchQuote1D(sym);
         wlData[sym] = { d1: q.changePercent ?? null };
@@ -701,8 +706,7 @@ renderBarChart();
 renderWatchlist();
 loadMarketOverview();
 loadAll();
-// Delay watchlist so it doesn't compete with the 26 ETF requests at t=0
-setTimeout(() => loadWatchlist(), 2000);
+loadWatchlist();
 
 </script>
 </body>
