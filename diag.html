@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>Direct Yahoo Diagnostic</title>
+<style>body{background:#0d1117;color:#c8d8e8;font-family:monospace;padding:20px;font-size:12px}
+.ok{color:#00e676}.fail{color:#ff4444}.warn{color:#ffd700}
+button{background:#1e2a38;color:#c8d8e8;border:1px solid #253040;padding:8px 16px;cursor:pointer;font-family:monospace;margin:4px;font-size:12px}
+</style></head>
+<body>
+<h2 style="color:#00b4ff">Direct Yahoo Finance Diagnostic</h2>
+<button onclick="test1()">Test 1: Single direct Yahoo request</button>
+<button onclick="test2()">Test 2: 26 concurrent direct Yahoo</button>
+<button onclick="test3()">Test 3: 56 concurrent direct Yahoo</button>
+<div id="out"></div>
+<script>
+const log = (msg, cls='') => { document.getElementById('out').innerHTML += '<div class="'+cls+'">'+msg+'</div>'; };
+const YF = sym => 'https://query2.finance.yahoo.com/v8/finance/chart/'+sym+'?range=1d&interval=1d';
+const ETFS = ['URNM','REMX','COPX','GRID','XOP','SMH','AIQ','HACK','QTUM','BOTZ','BKCH','IGV','PRNT','CLOD','ITA','DRNZ','UFO','GDX','SIL','XRT','GLUX','XLP','AWAY','XBI','XLF','KBWP'];
+const WL   = ['ONDS','RCAT','KTOS','AVAV','UMAC','LASR','LPTH','OUST','FEIM','DPRO','LITE','COHR','AAOI','GLW','FN','POET','MTSI','TSEM','MU','SNDK','WDC','STX','CAMT','ONTO','AMAT','TER','KLAC','FORM','LRCX','AMKR'];
+
+async function fetchDirect(sym) {
+  try {
+    const res = await fetch(YF(sym), {signal: AbortSignal.timeout(8000)});
+    if (!res.ok) return {sym, err: 'HTTP '+res.status};
+    const json = await res.json();
+    const price = json?.chart?.result?.[0]?.meta?.regularMarketPrice;
+    return {sym, price};
+  } catch(e) { return {sym, err: e.message}; }
+}
+
+async function test1() {
+  log('<br>--- Single direct Yahoo request ---');
+  const r = await fetchDirect('SPY');
+  log(r.err ? `✗ SPY: ${r.err}` : `✓ SPY: $${r.price}`, r.err ? 'fail' : 'ok');
+}
+
+async function test2() {
+  log('<br>--- 26 concurrent direct Yahoo (all ETFs) ---');
+  const t0 = Date.now();
+  const results = await Promise.all(ETFS.map(fetchDirect));
+  const ok = results.filter(r=>r.price).length;
+  log(`${ok}/26 ok in ${Date.now()-t0}ms`, ok===26?'ok':'warn');
+  results.filter(r=>r.err).forEach(r => log(`  ✗ ${r.sym}: ${r.err}`, 'fail'));
+}
+
+async function test3() {
+  log('<br>--- 56 concurrent direct Yahoo (ETFs + watchlist) ---');
+  const t0 = Date.now();
+  const results = await Promise.all([...ETFS,...WL].map(fetchDirect));
+  const ok = results.filter(r=>r.price).length;
+  log(`${ok}/56 ok in ${Date.now()-t0}ms`, ok===56?'ok':'warn');
+  results.filter(r=>r.err).forEach(r => log(`  ✗ ${r.sym}: ${r.err}`, 'fail'));
+}
+</script>
+</body>
+</html>
