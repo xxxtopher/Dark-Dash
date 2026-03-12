@@ -416,9 +416,10 @@ async function loadAll() {
     renderThemeRanking();
   }));
 
-  // Retry any that failed — wait 1.5s then re-fetch in parallel
-  const failed = THEMES.filter(t => etfPerf[t.id]?.pct == null);
-  if (failed.length) {
+  // Retry up to 2 more times for any that failed
+  for (let pass = 0; pass < 2; pass++) {
+    const failed = THEMES.filter(t => etfPerf[t.id]?.pct == null);
+    if (!failed.length) break;
     await new Promise(r => setTimeout(r, 1500));
     await Promise.all(failed.map(async (theme) => {
       try {
@@ -649,14 +650,30 @@ async function loadWatchlist() {
   const syms = [...new Set(WATCHLIST.flatMap(g=>g.tickers))];
   for (const sym of syms) wlData[sym] = { d1:null };
   renderWatchlist();
-  await Promise.all(syms.map(async (sym) => {
+
+  // Fire in two batches of 15 with a gap, to avoid competing with ETF requests
+  const batch1 = syms.slice(0, 15);
+  const batch2 = syms.slice(15);
+
+  await Promise.all(batch1.map(async (sym) => {
     try {
       const q = await fetchQuote1D(sym);
       wlData[sym] = { d1: q.changePercent ?? null };
     } catch(e) { wlData[sym] = { d1: null }; }
     renderWatchlist();
   }));
-  // Retry failures
+
+  await new Promise(r => setTimeout(r, 1000));
+
+  await Promise.all(batch2.map(async (sym) => {
+    try {
+      const q = await fetchQuote1D(sym);
+      wlData[sym] = { d1: q.changePercent ?? null };
+    } catch(e) { wlData[sym] = { d1: null }; }
+    renderWatchlist();
+  }));
+
+  // Retry any still null
   const failedSyms = syms.filter(s => wlData[s]?.d1 == null);
   if (failedSyms.length) {
     await new Promise(r => setTimeout(r, 1500));
@@ -684,7 +701,8 @@ renderBarChart();
 renderWatchlist();
 loadMarketOverview();
 loadAll();
-loadWatchlist();
+// Delay watchlist so it doesn't compete with the 26 ETF requests at t=0
+setTimeout(() => loadWatchlist(), 2000);
 
 </script>
 </body>
