@@ -294,18 +294,26 @@ const THEMES = [
 ];
 
 // ─── FETCH ────────────────────────────────────────────────────────────────────
-// CONFIRMED: allorigins.win serializes requests — only 1 in-flight at a time.
-// Any concurrent requests time out. Must queue strictly sequentially.
-// 26 ETFs × ~200ms each ≈ 5-6s total. Progressive render as each comes in.
+// CONFIRMED from diagnostics: allorigins handles only 1 request at a time.
+// Serial queue: each request waits for the previous to complete before starting.
+// CRITICAL: errors are caught inside the queue so one failure doesn't stop the chain.
 
 const YF_BASE = 'https://query2.finance.yahoo.com';
 const PROXY   = url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
 
-// Serial queue — only one fetch runs at a time
-let _queue = Promise.resolve();
+let _queueTail = Promise.resolve();
+let _reqCount = 0;
+
 function fetchOne(url) {
-  _queue = _queue.then(() => _doFetch(url));
-  return _queue;
+  _reqCount++;
+  const needsPause = _reqCount % 10 === 0;
+  const result = _queueTail.then(() =>
+    needsPause
+      ? new Promise(r => setTimeout(r, 500)).then(() => _doFetch(url))
+      : _doFetch(url)
+  );
+  _queueTail = result.catch(() => {});
+  return result;
 }
 
 async function _doFetch(url) {
@@ -333,8 +341,6 @@ async function fetchQuoteHistory(sym, range) {
   return closes.filter(v => v != null);
 }
 
-// Queue all items — they run one at a time through fetchOne's serial queue
-// taskFn fires immediately but its internal fetchOne call waits its turn
 function enqueueAll(items, taskFn) {
   return Promise.all(items.map(item => taskFn(item)));
 }
