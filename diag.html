@@ -1,54 +1,88 @@
 <!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><title>Direct Yahoo Diagnostic</title>
+<head><meta charset="UTF-8"><title>Proxy Hunt</title>
 <style>body{background:#0d1117;color:#c8d8e8;font-family:monospace;padding:20px;font-size:12px}
 .ok{color:#00e676}.fail{color:#ff4444}.warn{color:#ffd700}
 button{background:#1e2a38;color:#c8d8e8;border:1px solid #253040;padding:8px 16px;cursor:pointer;font-family:monospace;margin:4px;font-size:12px}
 </style></head>
 <body>
-<h2 style="color:#00b4ff">Direct Yahoo Finance Diagnostic</h2>
-<button onclick="test1()">Test 1: Single direct Yahoo request</button>
-<button onclick="test2()">Test 2: 26 concurrent direct Yahoo</button>
-<button onclick="test3()">Test 3: 56 concurrent direct Yahoo</button>
+<h2 style="color:#00b4ff">Proxy Hunt — find working proxies</h2>
+<button onclick="testAll()">Test all proxies for SPY</button>
+<button onclick="testWinners()">Test winners with 26 ETFs</button>
 <div id="out"></div>
 <script>
 const log = (msg, cls='') => { document.getElementById('out').innerHTML += '<div class="'+cls+'">'+msg+'</div>'; };
-const YF = sym => 'https://query2.finance.yahoo.com/v8/finance/chart/'+sym+'?range=1d&interval=1d';
+const TARGET = 'https://query2.finance.yahoo.com/v8/finance/chart/SPY?range=1d&interval=1d';
 const ETFS = ['URNM','REMX','COPX','GRID','XOP','SMH','AIQ','HACK','QTUM','BOTZ','BKCH','IGV','PRNT','CLOD','ITA','DRNZ','UFO','GDX','SIL','XRT','GLUX','XLP','AWAY','XBI','XLF','KBWP'];
-const WL   = ['ONDS','RCAT','KTOS','AVAV','UMAC','LASR','LPTH','OUST','FEIM','DPRO','LITE','COHR','AAOI','GLW','FN','POET','MTSI','TSEM','MU','SNDK','WDC','STX','CAMT','ONTO','AMAT','TER','KLAC','FORM','LRCX','AMKR'];
 
-async function fetchDirect(sym) {
+const PROXIES = [
+  { name:'allorigins /raw',  fn: u => 'https://api.allorigins.win/raw?url='+encodeURIComponent(u) },
+  { name:'allorigins /get',  fn: u => 'https://api.allorigins.win/get?url='+encodeURIComponent(u) },
+  { name:'corsproxy.io',     fn: u => 'https://corsproxy.io/?url='+encodeURIComponent(u) },
+  { name:'cors.sh',          fn: u => 'https://cors.sh/'+u },
+  { name:'thingproxy',       fn: u => 'https://thingproxy.freeboard.io/fetch/'+u },
+  { name:'codetabs',         fn: u => 'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u) },
+  { name:'jsonp.afeld',      fn: u => 'https://jsonp.afeld.me/?url='+encodeURIComponent(u) },
+  { name:'workers.dev (try)',fn: u => 'https://cors-proxy.htmldriven.com/?url='+encodeURIComponent(u) },
+  { name:'crossorigin.me',   fn: u => 'https://crossorigin.me/'+u },
+  { name:'allorigins.win/raw v2', fn: u => 'https://api.allorigins.win/raw?url='+encodeURIComponent(u)+'&_='+Date.now() },
+  { name:'gobetween (try)',  fn: u => 'https://gobetween.oklabs.org/pipe/'+encodeURIComponent(u) },
+  { name:'cors-anywhere herokuapp', fn: u => 'https://cors-anywhere.herokuapp.com/'+u },
+  { name:'yacdn',            fn: u => 'https://yacdn.org/proxy/'+u },
+  { name:'api.codetabs.com v2', fn: u => 'https://api.codetabs.com/v1/proxy/?quest='+encodeURIComponent(u) },
+  { name:'proxify (try)',    fn: u => 'https://proxy.cors.sh/'+u },
+];
+
+const winners = [];
+
+async function tryProxy(p, url) {
   try {
-    const res = await fetch(YF(sym), {signal: AbortSignal.timeout(8000)});
-    if (!res.ok) return {sym, err: 'HTTP '+res.status};
-    const json = await res.json();
+    const res = await fetch(p.fn(url), {signal: AbortSignal.timeout(6000)});
+    if (!res.ok) return {ok:false, err:'HTTP '+res.status};
+    const text = await res.text();
+    if (!text || text.length < 50) return {ok:false, err:'empty len='+text.length};
+    // unwrap if needed
+    let json;
+    try {
+      const t = text.startsWith('{"contents"') ? JSON.parse(text).contents : text;
+      json = JSON.parse(t);
+    } catch(e) { return {ok:false, err:'parse fail: '+text.slice(0,60)}; }
     const price = json?.chart?.result?.[0]?.meta?.regularMarketPrice;
-    return {sym, price};
-  } catch(e) { return {sym, err: e.message}; }
+    if (!price) return {ok:false, err:'no price in response'};
+    return {ok:true, price};
+  } catch(e) { return {ok:false, err:e.message}; }
 }
 
-async function test1() {
-  log('<br>--- Single direct Yahoo request ---');
-  const r = await fetchDirect('SPY');
-  log(r.err ? `✗ SPY: ${r.err}` : `✓ SPY: $${r.price}`, r.err ? 'fail' : 'ok');
+async function testAll() {
+  log('<br>Testing all proxies with single SPY request...<br>');
+  winners.length = 0;
+  for (const p of PROXIES) {
+    const t0 = Date.now();
+    const r = await tryProxy(p, TARGET);
+    const ms = Date.now()-t0;
+    if (r.ok) {
+      log(`✓ ${p.name}: $${r.price} (${ms}ms)`, 'ok');
+      winners.push(p);
+    } else {
+      log(`✗ ${p.name}: ${r.err} (${ms}ms)`, 'fail');
+    }
+  }
+  log(`<br>Winners: ${winners.map(p=>p.name).join(', ') || 'none'}`, winners.length?'ok':'fail');
 }
 
-async function test2() {
-  log('<br>--- 26 concurrent direct Yahoo (all ETFs) ---');
-  const t0 = Date.now();
-  const results = await Promise.all(ETFS.map(fetchDirect));
-  const ok = results.filter(r=>r.price).length;
-  log(`${ok}/26 ok in ${Date.now()-t0}ms`, ok===26?'ok':'warn');
-  results.filter(r=>r.err).forEach(r => log(`  ✗ ${r.sym}: ${r.err}`, 'fail'));
-}
-
-async function test3() {
-  log('<br>--- 56 concurrent direct Yahoo (ETFs + watchlist) ---');
-  const t0 = Date.now();
-  const results = await Promise.all([...ETFS,...WL].map(fetchDirect));
-  const ok = results.filter(r=>r.price).length;
-  log(`${ok}/56 ok in ${Date.now()-t0}ms`, ok===56?'ok':'warn');
-  results.filter(r=>r.err).forEach(r => log(`  ✗ ${r.sym}: ${r.err}`, 'fail'));
+async function testWinners() {
+  if (!winners.length) { log('Run "Test all proxies" first', 'warn'); return; }
+  log(`<br>Testing ${winners.length} winner(s) with all 26 ETFs concurrently...<br>`);
+  for (const p of winners) {
+    const t0 = Date.now();
+    const results = await Promise.all(ETFS.map(sym => {
+      const url = 'https://query2.finance.yahoo.com/v8/finance/chart/'+sym+'?range=1d&interval=1d';
+      return tryProxy(p, url);
+    }));
+    const ok = results.filter(r=>r.ok).length;
+    log(`${p.name}: ${ok}/26 ok in ${Date.now()-t0}ms`, ok===26?'ok':'warn');
+    results.forEach((r,i) => { if(!r.ok) log(`  ✗ ${ETFS[i]}: ${r.err}`, 'fail'); });
+  }
 }
 </script>
 </body>
