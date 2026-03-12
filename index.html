@@ -294,26 +294,13 @@ const THEMES = [
 ];
 
 // ─── FETCH ────────────────────────────────────────────────────────────────────
-// CONFIRMED from diagnostics: allorigins handles only 1 request at a time.
-// Serial queue: each request waits for the previous to complete before starting.
-// CRITICAL: errors are caught inside the queue so one failure doesn't stop the chain.
+// Diagnostic confirmed: 20 concurrent allorigins requests = 20/20 ok in 135ms.
+// Pure Promise.all is the correct approach. All throttling/queuing made things worse.
 
 const YF_BASE = 'https://query2.finance.yahoo.com';
 const PROXY   = url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
 
-let _queueTail = Promise.resolve();
-
-function fetchOne(url) {
-  // 200ms minimum gap between requests — allorigins drops requests
-  // if hammered continuously even sequentially beyond ~12 in a row.
-  const result = _queueTail.then(() =>
-    new Promise(r => setTimeout(r, 200)).then(() => _doFetch(url))
-  );
-  _queueTail = result.catch(() => {});
-  return result;
-}
-
-async function _doFetch(url) {
+async function fetchOne(url) {
   const res = await fetch(PROXY(url), { signal: AbortSignal.timeout(10000) });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const text = await res.text();
@@ -336,10 +323,6 @@ async function fetchQuoteHistory(sym, range) {
   const data = await fetchOne(`${YF_BASE}/v8/finance/chart/${sym}?range=${range}&interval=1d`);
   const closes = data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? [];
   return closes.filter(v => v != null);
-}
-
-function enqueueAll(items, taskFn) {
-  return Promise.all(items.map(item => taskFn(item)));
 }
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
@@ -420,19 +403,34 @@ async function loadAll() {
   renderBarChart();
   document.getElementById('refreshBtn').classList.add('loading');
 
-  await enqueueAll(THEMES, async (theme) => {
+  await Promise.all(THEMES.map(async (theme) => {
     try {
       const q = await fetchQuote1D(theme.etf);
       etfPerf[theme.id] = { pct: q.changePercent, price: q.price };
     } catch(e) {
-      console.warn('[etf]', theme.etf, e.message);
       etfPerf[theme.id] = { pct: null, price: null };
     }
     loadedCount = Object.values(etfPerf).filter(d => d?.pct != null).length;
     document.getElementById('statusLoaded').textContent = loadedCount;
     renderBarChart();
     renderThemeRanking();
-  });
+  }));
+
+  // Retry any that failed — wait 1.5s then re-fetch in parallel
+  const failed = THEMES.filter(t => etfPerf[t.id]?.pct == null);
+  if (failed.length) {
+    await new Promise(r => setTimeout(r, 1500));
+    await Promise.all(failed.map(async (theme) => {
+      try {
+        const q = await fetchQuote1D(theme.etf);
+        etfPerf[theme.id] = { pct: q.changePercent, price: q.price };
+      } catch(e) { console.warn('[etf retry]', theme.etf, e.message); }
+      loadedCount = Object.values(etfPerf).filter(d => d?.pct != null).length;
+      document.getElementById('statusLoaded').textContent = loadedCount;
+      renderBarChart();
+      renderThemeRanking();
+    }));
+  }
 
   document.getElementById('refreshBtn').classList.remove('loading');
   document.getElementById('lastUpdate').textContent =
@@ -596,13 +594,13 @@ async function loadBreadth(force=false) {
   Object.assign(breadthState, {above20:null,above50:null,above200:null,highs:null,lows:null,lastComputed:null});
   for (const k of Object.keys(holdingHistory)) delete holdingHistory[k];
   renderBreadth();
-  await enqueueAll(ALL_HOLDING_SYMS, async (sym) => {
+  await Promise.all(ALL_HOLDING_SYMS.map(async (sym) => {
     try {
       const closes = await fetchQuoteHistory(sym,'1y');
       holdingHistory[sym] = { closes, loaded:true };
     } catch { holdingHistory[sym] = { closes:[], loaded:true }; }
     recomputeBreadth();
-  });
+  }));
   breadthState.lastComputed = Date.now();
   breadthComputing = false;
   document.getElementById('breadthBtn').classList.remove('computing');
@@ -651,28 +649,42 @@ async function loadWatchlist() {
   const syms = [...new Set(WATCHLIST.flatMap(g=>g.tickers))];
   for (const sym of syms) wlData[sym] = { d1:null };
   renderWatchlist();
-  await enqueueAll(syms, async (sym) => {
+  await Promise.all(syms.map(async (sym) => {
     try {
       const q = await fetchQuote1D(sym);
       wlData[sym] = { d1: q.changePercent ?? null };
-    } catch(e) { console.warn('[wl]',sym,e.message); }
+    } catch(e) { wlData[sym] = { d1: null }; }
     renderWatchlist();
-  });
+  }));
+  // Retry failures
+  const failedSyms = syms.filter(s => wlData[s]?.d1 == null);
+  if (failedSyms.length) {
+    await new Promise(r => setTimeout(r, 1500));
+    await Promise.all(failedSyms.map(async (sym) => {
+      try {
+        const q = await fetchQuote1D(sym);
+        wlData[sym] = { d1: q.changePercent ?? null };
+      } catch(e) { console.warn('[wl retry]', sym, e.message); }
+      renderWatchlist();
+    }));
+  }
 }
 
 // ─── CONTROLS ─────────────────────────────────────────────────────────────────
 document.getElementById('refreshBtn').addEventListener('click', () => {
   for (const k of Object.keys(etfPerf)) delete etfPerf[k];
-  loadMarketOverview().then(() => loadAll()).then(() => loadWatchlist());
+  loadMarketOverview();
+  loadAll();
+  loadWatchlist();
   if (breadthVisible) loadBreadth(true);
 });
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 renderBarChart();
 renderWatchlist();
-// Load in strict sequence: index candles first (they queue 2 big requests),
-// then ETFs, then watchlist — so index charts always render early.
-loadMarketOverview().then(() => loadAll()).then(() => loadWatchlist());
+loadMarketOverview();
+loadAll();
+loadWatchlist();
 
 </script>
 </body>
