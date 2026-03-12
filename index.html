@@ -294,29 +294,46 @@ const THEMES = [
 ];
 
 // ─── FETCH ────────────────────────────────────────────────────────────────────
-// Strategy: stagger requests 120ms apart so Yahoo never sees a burst.
-// 26 ETFs = 3.1s to dispatch, each returns in ~1-2s = done by ~5s.
-// Watchlist 30 syms staggered 80ms apart, starts after ETFs begin.
-// Each request retries once on failure (2s gap).
+// Problem: any single CORS proxy gets rate-limited when 26+ requests hit at once.
+// Solution: rotate across 3 proxies round-robin so each proxy only handles ~9 reqs.
+//           On failure, try the next proxy before giving up.
 
 const YF_BASE = 'https://query2.finance.yahoo.com';
-const PROXY   = 'https://api.allorigins.win/raw?url=';
+const PROXIES = [
+  url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
+  url => 'https://corsproxy.io/?url='          + encodeURIComponent(url),
+  url => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url),
+];
+let _proxyIdx = 0; // round-robin counter
 
-async function _rawFetch(url) {
-  const res = await fetch(PROXY + encodeURIComponent(url), { signal: AbortSignal.timeout(12000) });
+async function _tryProxy(url, proxyFn) {
+  const res = await fetch(proxyFn(url), { signal: AbortSignal.timeout(10000) });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const text = await res.text();
   if (!text || text.length < 20) throw new Error('empty');
+  // codetabs wraps in {"status":"...","response":"..."} — unwrap if needed
+  if (text.startsWith('{"status"')) {
+    const w = JSON.parse(text);
+    return JSON.parse(w.response ?? w.contents ?? text);
+  }
   return JSON.parse(text);
 }
 
 async function fetchOne(url) {
-  try {
-    return await _rawFetch(url);
-  } catch(e) {
-    await new Promise(r => setTimeout(r, 2000));
-    return _rawFetch(url); // one retry, let it throw if still fails
+  // Try assigned proxy first, then fall through all others
+  const start = _proxyIdx++ % PROXIES.length;
+  const order = [start, (start+1)%PROXIES.length, (start+2)%PROXIES.length];
+  let lastErr;
+  for (const i of order) {
+    try {
+      return await _tryProxy(url, PROXIES[i]);
+    } catch(e) {
+      lastErr = e;
+      // brief pause before trying next proxy
+      await new Promise(r => setTimeout(r, 300));
+    }
   }
+  throw lastErr;
 }
 
 async function fetchQuote1D(sym) {
@@ -336,8 +353,12 @@ async function fetchQuoteHistory(sym, range) {
   return closes.filter(v => v != null);
 }
 
-// Run tasks with a fixed delay between each start (not between completions).
-// Each task still runs concurrently — we just don't fire them all at t=0.
+// Fire all tasks fully in parallel — proxy rotation spreads the load
+function parallel(items, taskFn) {
+  return Promise.all(items.map(item => taskFn(item)));
+}
+
+// Stagger: start each task delayMs after the previous (still concurrent)
 function staggered(items, taskFn, delayMs) {
   return Promise.all(
     items.map((item, i) =>
@@ -424,7 +445,7 @@ async function loadAll() {
   renderBarChart();
   document.getElementById('refreshBtn').classList.add('loading');
 
-  await staggered(THEMES, async (theme) => {
+  await parallel(THEMES, async (theme) => {
     try {
       const q = await fetchQuote1D(theme.etf);
       etfPerf[theme.id] = { pct: q.changePercent, price: q.price };
@@ -436,7 +457,7 @@ async function loadAll() {
     document.getElementById('statusLoaded').textContent = loadedCount;
     renderBarChart();
     renderThemeRanking();
-  }, 120);
+  });
 
   document.getElementById('refreshBtn').classList.remove('loading');
   document.getElementById('lastUpdate').textContent =
@@ -602,13 +623,13 @@ async function loadBreadth(force=false) {
   Object.assign(breadthState, {above20:null,above50:null,above200:null,highs:null,lows:null,lastComputed:null});
   for (const k of Object.keys(holdingHistory)) delete holdingHistory[k];
   renderBreadth();
-  await staggered(ALL_HOLDING_SYMS, async (sym) => {
+  await parallel(ALL_HOLDING_SYMS, async (sym) => {
     try {
       const closes = await fetchQuoteHistory(sym,'1y');
       holdingHistory[sym] = { closes, loaded:true };
     } catch { holdingHistory[sym] = { closes:[], loaded:true }; }
     recomputeBreadth();
-  }, 80);
+  });
   breadthState.lastComputed = Date.now();
   breadthComputing = false;
   document.getElementById('breadthBtn').classList.remove('computing');
@@ -657,14 +678,13 @@ async function loadWatchlist() {
   const syms = [...new Set(WATCHLIST.flatMap(g=>g.tickers))];
   for (const sym of syms) wlData[sym] = { d1:null };
   renderWatchlist();
-  // Stagger 80ms — starts concurrently with ETF load but won't burst Yahoo
-  await staggered(syms, async (sym) => {
+  await parallel(syms, async (sym) => {
     try {
       const q = await fetchQuote1D(sym);
       wlData[sym] = { d1: q.changePercent ?? null };
     } catch(e) { console.warn('[wl]',sym,e.message); }
     renderWatchlist();
-  }, 80);
+  });
 }
 
 // ─── CONTROLS ─────────────────────────────────────────────────────────────────
