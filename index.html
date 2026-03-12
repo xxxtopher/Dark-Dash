@@ -1367,15 +1367,15 @@ const THEMES = [
 ];
 
 // ─── FETCH LAYER ──────────────────────────────────────────────────────────────
-// DIAGNOSTIC FINDINGS:
-//   corsproxy.io    → HTTP 403 (blocked)
-//   thingproxy      → failed to fetch (blocked)
-//   allorigins/raw  → WORKS, ~1-4s, truncates to ~1230 bytes
-//   allorigins/get  → wraps in {"contents":...} but /raw is cleaner
-//   v7 batch        → 157 bytes empty result through allorigins (blocked)
-//   v8/chart meta   → fits in 1230 bytes ✓ (price + changePercent in meta)
+// CONFIRMED WORKING (from browser diagnostic):
+//   allorigins/raw  → WORKS, 20 concurrent in 135ms, all ranges intact
+//   corsproxy.io    → HTTP 403 blocked
+//   thingproxy      → Failed to fetch
+//   v7 batch        → returns empty through allorigins
+//   KEY BUG: regularMarketChangePercent absent from meta — must calculate from
+//            (regularMarketPrice - chartPreviousClose) / chartPreviousClose
 //
-// STRATEGY: allorigins/raw + v8/chart + fire ALL symbols fully in parallel
+// STRATEGY: allorigins/raw + v8/chart per symbol + all symbols fully parallel
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -1391,7 +1391,7 @@ async function fetchOne(url) {
   return JSON.parse(text);
 }
 
-// Fetch price+changePercent for one symbol via v8/chart meta (fits in truncated response)
+// Fetch price+changePercent for one symbol via v8/chart meta
 async function fetchQuote1D(sym) {
   const data = await fetchOne(
     `${YF_BASE}/v8/finance/chart/${sym}?range=1d&interval=1d`);
@@ -1399,22 +1399,18 @@ async function fetchQuote1D(sym) {
   if (!meta) return { changePercent: null, price: null };
   const price = meta.regularMarketPrice ?? null;
   const prev  = meta.chartPreviousClose ?? meta.previousClose ?? null;
-  return {
-    price,
-    changePercent: (price && prev) ? ((price - prev) / prev) * 100 : null,
-  };
+  // regularMarketChangePercent is NOT in the response — calculate it
+  const changePercent = (price != null && prev != null && prev !== 0)
+    ? ((price - prev) / prev) * 100 : null;
+  return { price, changePercent };
 }
 
-// Fetch historical closes for one symbol (need range data — may be truncated for long ranges)
+// Fetch historical closes — all ranges work fine through allorigins
 async function fetchQuoteHistory(sym, range) {
-  // Use short ranges to keep response small enough for allorigins
-  // 5d and 1mo are compact; ytd we use 6mo to keep it smaller
-  const yRange = range === 'ytd' ? '6mo' : range;
   const data = await fetchOne(
-    `${YF_BASE}/v8/finance/chart/${sym}?range=${yRange}&interval=1d`);
+    `${YF_BASE}/v8/finance/chart/${sym}?range=${range}&interval=1d`);
   const closes = data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? [];
-  const valid = closes.filter(v => v != null);
-  return valid;
+  return closes.filter(v => v != null);
 }
 
 function calcPctChange(closes) {
@@ -2055,10 +2051,10 @@ function computeMA(closes, period) {
 async function fetchHoldingHistory(symbol) {
   if (holdingHistory[symbol]?.loaded) return holdingHistory[symbol].closes;
   try {
-    // 6mo keeps response small enough for allorigins (1y gets truncated)
-    const url = `${YF_BASE}/v8/finance/chart/${symbol}?range=6mo&interval=1d`;
-    const data = await fetchOne(url);
-    const closes = (data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? []).filter(v => v != null);
+    const data = await fetchOne(
+      `${YF_BASE}/v8/finance/chart/${symbol}?range=1y&interval=1d`);
+    const closes = (data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? [])
+      .filter(v => v != null);
     holdingHistory[symbol] = { closes, loaded: true };
     return closes;
   } catch {
