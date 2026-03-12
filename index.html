@@ -293,19 +293,40 @@ const THEMES = [
 ];
 
 // ─── FETCH ────────────────────────────────────────────────────────────────────
-// Page load: 26 ETF quotes + 2 index candles = 28 requests
-// After load: ~30 watchlist requests
-// Breadth: ~220 requests, user-triggered only
+// allorigins.win is a free proxy — it works but throttles heavy concurrent load.
+// We use a concurrency limiter: max 4 in-flight at once, 80ms gap between starts.
+// This keeps allorigins happy and loads all 26 ETFs in ~8-10 seconds reliably.
 
 const YF_BASE = 'https://query2.finance.yahoo.com';
 const PROXY   = 'https://api.allorigins.win/raw?url=';
 
-async function fetchOne(url) {
-  const res = await fetch(PROXY + encodeURIComponent(url), { signal: AbortSignal.timeout(12000) });
+// Concurrency limiter
+const MAX_CONCURRENT = 4;
+let _inFlight = 0;
+const _queue = [];
+function _runNext() {
+  if (_inFlight >= MAX_CONCURRENT || _queue.length === 0) return;
+  const { fn, resolve, reject } = _queue.shift();
+  _inFlight++;
+  fn().then(resolve, reject).finally(() => { _inFlight--; _runNext(); });
+}
+function throttled(fn) {
+  return new Promise((resolve, reject) => {
+    _queue.push({ fn, resolve, reject });
+    _runNext();
+  });
+}
+
+async function _doFetch(url) {
+  const res = await fetch(PROXY + encodeURIComponent(url), { signal: AbortSignal.timeout(15000) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const text = await res.text();
-  if (!text || text.length < 20) throw new Error('empty');
+  if (!text || text.length < 20) throw new Error('empty response');
   return JSON.parse(text);
+}
+
+function fetchOne(url) {
+  return throttled(() => _doFetch(url));
 }
 
 async function fetchQuote1D(sym) {
