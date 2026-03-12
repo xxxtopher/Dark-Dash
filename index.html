@@ -262,6 +262,7 @@
 </div>
 
 <script>
+
 // ─── THEMES ───────────────────────────────────────────────────────────────────
 const THEMES = [
   { id:'uranium',    name:'URANIUM',            etf:'URNM', color:'#ff9800', category:'ENERGY & RESOURCES',  holdings:['CCJ','NXE','UEC','UUUU','DNN','URG','SMR'] },
@@ -293,28 +294,28 @@ const THEMES = [
 ];
 
 // ─── FETCH ────────────────────────────────────────────────────────────────────
-// Fully parallel — allorigins handles 20+ concurrent fine (confirmed in diagnostics).
-// Yahoo Finance occasionally returns 429/empty for some symbols under load.
-// Retry once after a short delay to catch those transient failures.
+// Strategy: stagger requests 120ms apart so Yahoo never sees a burst.
+// 26 ETFs = 3.1s to dispatch, each returns in ~1-2s = done by ~5s.
+// Watchlist 30 syms staggered 80ms apart, starts after ETFs begin.
+// Each request retries once on failure (2s gap).
 
 const YF_BASE = 'https://query2.finance.yahoo.com';
 const PROXY   = 'https://api.allorigins.win/raw?url=';
 
-async function fetchOne(url, attempt = 0) {
+async function _rawFetch(url) {
+  const res = await fetch(PROXY + encodeURIComponent(url), { signal: AbortSignal.timeout(12000) });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const text = await res.text();
+  if (!text || text.length < 20) throw new Error('empty');
+  return JSON.parse(text);
+}
+
+async function fetchOne(url) {
   try {
-    const res = await fetch(PROXY + encodeURIComponent(url), { signal: AbortSignal.timeout(15000) });
-    if (res.status === 429 || res.status === 503) throw new Error(`HTTP ${res.status}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
-    if (!text || text.length < 20) throw new Error('empty');
-    return JSON.parse(text);
-  } catch (e) {
-    if (attempt === 0) {
-      // Wait 1.5s then retry once
-      await new Promise(r => setTimeout(r, 1500));
-      return fetchOne(url, 1);
-    }
-    throw e;
+    return await _rawFetch(url);
+  } catch(e) {
+    await new Promise(r => setTimeout(r, 2000));
+    return _rawFetch(url); // one retry, let it throw if still fails
   }
 }
 
@@ -335,8 +336,18 @@ async function fetchQuoteHistory(sym, range) {
   return closes.filter(v => v != null);
 }
 
+// Run tasks with a fixed delay between each start (not between completions).
+// Each task still runs concurrently — we just don't fire them all at t=0.
+function staggered(items, taskFn, delayMs) {
+  return Promise.all(
+    items.map((item, i) =>
+      new Promise(r => setTimeout(r, i * delayMs)).then(() => taskFn(item))
+    )
+  );
+}
+
 // ─── STATE ────────────────────────────────────────────────────────────────────
-const etfPerf = {}; // { [themeId]: { pct, price } }
+const etfPerf = {};
 let loadedCount = 0;
 
 function fmtPct(v) { return v == null ? '—' : (v >= 0 ? '+' : '') + v.toFixed(2) + '%'; }
@@ -346,13 +357,11 @@ function pctClass(v) {
   if (v < -0.05) return 'neg';
   return 'flat';
 }
-function tvUrl(sym) { return `https://www.tradingview.com/symbols/${sym}/`; }
+function tvUrl(sym) { return 'https://www.tradingview.com/symbols/' + sym + '/'; }
 
 // ─── BAR CHART ────────────────────────────────────────────────────────────────
 function renderBarChart() {
   const container = document.getElementById('themeBarChart');
-
-  // Sort by pct desc, nulls at end
   const sorted = [...THEMES].sort((a, b) => {
     const pa = etfPerf[a.id]?.pct ?? null;
     const pb = etfPerf[b.id]?.pct ?? null;
@@ -361,79 +370,51 @@ function renderBarChart() {
     if (pb == null) return -1;
     return pb - pa;
   });
-
   const loaded  = sorted.filter(t => etfPerf[t.id]?.pct != null);
   const pending = sorted.filter(t => etfPerf[t.id]?.pct == null);
-
-  // Scale bars to max absolute value, minimum 1.5% so bars are always visible
-  const maxAbs = Math.max(1.5, ...loaded.map(t => Math.abs(etfPerf[t.id].pct)));
+  const maxAbs  = Math.max(1.5, ...loaded.map(t => Math.abs(etfPerf[t.id].pct)));
 
   const makeRow = (theme) => {
-    const d = etfPerf[theme.id];
-    const pct = d?.pct ?? null;
+    const pct = etfPerf[theme.id]?.pct ?? null;
     const cls = pctClass(pct);
-    // Bar fills half the track (50% = zero line), scale within that half
     const fillW = pct != null ? Math.min(Math.abs(pct) / maxAbs * 48, 48) : 0;
-
-    return `<a class="bar-row" href="${tvUrl(theme.etf)}" target="_blank" rel="noopener" title="Open ${theme.etf} on TradingView">
-      <div class="bar-label">
-        <div class="bar-name" style="color:${theme.color}">${theme.name}</div>
-        <div class="bar-etf">${theme.etf} ↗</div>
-      </div>
-      <div class="bar-track">
-        <div class="bar-fill ${pct != null ? cls : 'loading'}" style="width:${fillW}%"></div>
-      </div>
-      <div class="bar-pct ${pct != null ? cls : 'loading'}">${pct != null ? fmtPct(pct) : '···'}</div>
-    </a>`;
+    return '<a class="bar-row" href="' + tvUrl(theme.etf) + '" target="_blank" rel="noopener">' +
+      '<div class="bar-label">' +
+        '<div class="bar-name" style="color:' + theme.color + '">' + theme.name + '</div>' +
+        '<div class="bar-etf">' + theme.etf + ' \u2197</div>' +
+      '</div>' +
+      '<div class="bar-track">' +
+        '<div class="bar-fill ' + (pct != null ? cls : 'loading') + '" style="width:' + fillW + '%"></div>' +
+      '</div>' +
+      '<div class="bar-pct ' + (pct != null ? cls : 'loading') + '">' + (pct != null ? fmtPct(pct) : '\u22ef\u22ef\u22ef') + '</div>' +
+    '</a>';
   };
 
   let html = '';
-
   if (loaded.length) {
     const gainers = loaded.filter(t => etfPerf[t.id].pct >= 0);
-    const losers  = loaded.filter(t => etfPerf[t.id].pct < 0);
-
-    if (gainers.length) html += `
-      <div class="bar-section">
-        <div class="bar-section-title" style="color:var(--green)">▲ Advancing — ${gainers.length} themes</div>
-        ${gainers.map(makeRow).join('')}
-      </div>`;
-
-    if (losers.length) html += `
-      <div class="bar-section">
-        <div class="bar-section-title" style="color:var(--red)">▼ Declining — ${losers.length} themes</div>
-        ${losers.map(makeRow).join('')}
-      </div>`;
+    const losers  = loaded.filter(t => etfPerf[t.id].pct <  0);
+    if (gainers.length) html += '<div class="bar-section"><div class="bar-section-title" style="color:var(--green)">\u25b2 Advancing \u2014 ' + gainers.length + ' themes</div>' + gainers.map(makeRow).join('') + '</div>';
+    if (losers.length)  html += '<div class="bar-section"><div class="bar-section-title" style="color:var(--red)">\u25bc Declining \u2014 ' + losers.length + ' themes</div>'  + losers.map(makeRow).join('')  + '</div>';
   }
-
-  if (pending.length) html += `
-    <div class="bar-section">
-      <div class="bar-section-title" style="color:var(--text3)">⋯ Loading — ${pending.length}</div>
-      ${pending.map(makeRow).join('')}
-    </div>`;
-
+  if (pending.length) html += '<div class="bar-section"><div class="bar-section-title" style="color:var(--text3)">\u22ef Loading \u2014 ' + pending.length + '</div>' + pending.map(makeRow).join('') + '</div>';
   container.innerHTML = html;
 }
 
 // ─── RANKING SIDEBAR ──────────────────────────────────────────────────────────
 function renderThemeRanking() {
   const ranked = THEMES
-    .map(t => ({ name: t.name, etf: t.etf, pct: etfPerf[t.id]?.pct ?? null }))
+    .map(t => ({ name: t.name, pct: etfPerf[t.id]?.pct ?? null }))
     .filter(t => t.pct != null)
     .sort((a, b) => b.pct - a.pct);
   if (!ranked.length) return;
-
   const top = ranked.slice(0, 3);
   const bot = ranked.slice(-3).reverse();
-  const row = t => `<div class="ranking-row">
-    <span class="ranking-name">${t.name}</span>
-    <span class="ranking-pct ${t.pct >= 0 ? 'pos':'neg'}">${t.pct >= 0?'+':''}${t.pct.toFixed(2)}%</span>
-  </div>`;
-
-  document.getElementById('themeRankingTable').innerHTML = `
-    <div class="ranking-section-label top">▲ Leaders</div>${top.map(row).join('')}
-    <hr class="ranking-divider">
-    <div class="ranking-section-label bot">▼ Laggards</div>${bot.map(row).join('')}`;
+  const row = t => '<div class="ranking-row"><span class="ranking-name">' + t.name + '</span><span class="ranking-pct ' + (t.pct >= 0 ? 'pos' : 'neg') + '">' + (t.pct >= 0 ? '+' : '') + t.pct.toFixed(2) + '%</span></div>';
+  document.getElementById('themeRankingTable').innerHTML =
+    '<div class="ranking-section-label top">\u25b2 Leaders</div>' + top.map(row).join('') +
+    '<hr class="ranking-divider">' +
+    '<div class="ranking-section-label bot">\u25bc Laggards</div>' + bot.map(row).join('');
 }
 
 // ─── LOAD ALL ETFs ────────────────────────────────────────────────────────────
@@ -441,50 +422,30 @@ async function loadAll() {
   loadedCount = 0;
   document.getElementById('statusLoaded').textContent = '0';
   renderBarChart();
-  const btn = document.getElementById('refreshBtn');
-  btn.classList.add('loading');
+  document.getElementById('refreshBtn').classList.add('loading');
 
-  // First pass — fully parallel
-  await Promise.all(THEMES.map(async theme => {
+  await staggered(THEMES, async (theme) => {
     try {
       const q = await fetchQuote1D(theme.etf);
       etfPerf[theme.id] = { pct: q.changePercent, price: q.price };
     } catch(e) {
-      console.warn('[etf fail]', theme.etf, e.message);
+      console.warn('[etf]', theme.etf, e.message);
       etfPerf[theme.id] = { pct: null, price: null };
     }
     loadedCount = Object.values(etfPerf).filter(d => d?.pct != null).length;
     document.getElementById('statusLoaded').textContent = loadedCount;
     renderBarChart();
     renderThemeRanking();
-  }));
+  }, 120);
 
-  // Second pass — retry any that came back null (Yahoo sometimes drops a few)
-  const nullThemes = THEMES.filter(t => etfPerf[t.id]?.pct == null);
-  if (nullThemes.length > 0) {
-    console.log('[retry]', nullThemes.map(t => t.etf).join(', '));
-    await Promise.all(nullThemes.map(async theme => {
-      try {
-        const q = await fetchQuote1D(theme.etf);
-        etfPerf[theme.id] = { pct: q.changePercent, price: q.price };
-      } catch(e) {
-        console.warn('[etf retry fail]', theme.etf, e.message);
-      }
-      loadedCount = Object.values(etfPerf).filter(d => d?.pct != null).length;
-      document.getElementById('statusLoaded').textContent = loadedCount;
-      renderBarChart();
-      renderThemeRanking();
-    }));
-  }
-
-  btn.classList.remove('loading');
+  document.getElementById('refreshBtn').classList.remove('loading');
   document.getElementById('lastUpdate').textContent =
     'UPDATED ' + new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
 }
 
 // ─── MARKET OVERVIEW ──────────────────────────────────────────────────────────
 async function fetchIndexIntraday(symbol) {
-  const data = await fetchOne(`${YF_BASE}/v8/finance/chart/${symbol}?range=1d&interval=5m`);
+  const data = await fetchOne(YF_BASE + '/v8/finance/chart/' + symbol + '?range=1d&interval=5m');
   const result = data?.chart?.result?.[0];
   if (!result) return null;
   const meta = result.meta;
@@ -509,7 +470,6 @@ function drawCandleChart(canvasId, candles, prevClose) {
   canvas.width = W*devicePixelRatio; canvas.height = H*devicePixelRatio;
   const ctx = canvas.getContext('2d');
   ctx.scale(devicePixelRatio, devicePixelRatio);
-
   const now = new Date(), etNow = new Date(now.toLocaleString('en-US',{timeZone:'America/New_York'}));
   const yr=etNow.getFullYear(), mo=etNow.getMonth(), dy=etNow.getDate();
   const off = etNow.getTime()-now.getTime();
@@ -518,29 +478,26 @@ function drawCandleChart(canvasId, candles, prevClose) {
   const dur  = cUTC-oUTC;
   const LH=14, cH=H-LH, PL=2, PR=2, cW=W-PL-PR;
   const tX = ms => PL + ((ms-oUTC)/dur)*cW;
-
   const mn=Math.min(...candles.map(c=>c.l), prevClose??Infinity);
   const mx=Math.max(...candles.map(c=>c.h), prevClose??-Infinity);
   const rng=mx-mn||1;
   const toY = v => cH*0.04+(1-(v-mn)/rng)*cH*0.88;
   const sw=cW/78, bw=Math.max(1.5,sw*0.6);
-
   if (prevClose!=null) {
     ctx.beginPath(); ctx.setLineDash([3,4]); ctx.strokeStyle='rgba(100,130,150,0.4)'; ctx.lineWidth=1;
     ctx.moveTo(PL,toY(prevClose)); ctx.lineTo(PL+cW,toY(prevClose)); ctx.stroke(); ctx.setLineDash([]);
   }
   for (const c of candles) {
     const x=tX(c.t*1000), g=c.c>=c.o;
-    const col=g?'#00e676':'#ff4444';
     const oY=toY(c.o),cY=toY(c.c),hY=toY(c.h),lY=toY(c.l);
     ctx.beginPath(); ctx.strokeStyle=g?'rgba(0,230,118,0.5)':'rgba(255,68,68,0.5)'; ctx.lineWidth=1;
     ctx.moveTo(x,hY); ctx.lineTo(x,lY); ctx.stroke();
-    ctx.fillStyle=col; ctx.fillRect(x-bw/2,Math.min(oY,cY),bw,Math.max(1,Math.abs(cY-oY)));
+    ctx.fillStyle=g?'#00e676':'#ff4444';
+    ctx.fillRect(x-bw/2,Math.min(oY,cY),bw,Math.max(1,Math.abs(cY-oY)));
   }
   const last=candles[candles.length-1];
   ctx.beginPath(); ctx.arc(tX(last.t*1000),toY(last.c),2.5,0,Math.PI*2);
   ctx.fillStyle=last.c>=last.o?'#00e676':'#ff4444'; ctx.fill();
-
   ctx.font='7px "IBM Plex Mono",monospace'; ctx.textAlign='center';
   for (const lt of [{h:9,m:30,l:'9:30'},{h:11,m:30,l:'11:30'},{h:13,m:30,l:'1:30'},{h:15,m:30,l:'3:30'},{h:16,m:0,l:'4pm'}]) {
     const lx=tX(new Date(yr,mo,dy,lt.h,lt.m,0).getTime()-off);
@@ -564,15 +521,14 @@ function updateIndexUI(pfx, data) {
 }
 
 async function loadMarketOverview() {
-  const [spx,ndx] = await Promise.all([
-    fetchIndexIntraday('%5EGSPC').catch(()=>null),
-    fetchIndexIntraday('%5EIXIC').catch(()=>null),
-  ]);
-  updateIndexUI('spx',spx); updateIndexUI('ndx',ndx);
-  requestAnimationFrame(()=>{
-    if (spx?.candles?.length) drawCandleChart('spxChart',spx.candles,spx.prevClose);
-    if (ndx?.candles?.length) drawCandleChart('ndxChart',ndx.candles,ndx.prevClose);
-  });
+  // Stagger 500ms so index candles don't compete with ETF burst at t=0
+  const spx = await fetchIndexIntraday('%5EGSPC').catch(()=>null);
+  updateIndexUI('spx', spx);
+  requestAnimationFrame(()=>{ if (spx?.candles?.length) drawCandleChart('spxChart',spx.candles,spx.prevClose); });
+  await new Promise(r => setTimeout(r, 300));
+  const ndx = await fetchIndexIntraday('%5EIXIC').catch(()=>null);
+  updateIndexUI('ndx', ndx);
+  requestAnimationFrame(()=>{ if (ndx?.candles?.length) drawCandleChart('ndxChart',ndx.candles,ndx.prevClose); });
 }
 
 // ─── BREADTH (on-demand) ──────────────────────────────────────────────────────
@@ -592,48 +548,19 @@ function renderBreadth() {
   const cls200 = above200!=null?(above200>=60?'pos':above200>=40?'neutral':'neg'):'loading';
   const clsH   = highs!=null?(highs>100?'pos':highs>40?'neutral':'neg'):'loading';
   const clsL   = lows !=null?(lows >100?'neg':lows >40?'neutral':'pos'):'loading';
-
-  document.getElementById('breadthGrid').innerHTML = `
-    <div class="breadth-card">
-      <div class="breadth-card-title">Advance / Decline</div>
-      <div style="display:flex;gap:10px;align-items:baseline;margin-bottom:4px">
-        <div class="breadth-value pos">${up??'···'}<span style="font-size:10px;font-weight:400;color:var(--text3)"> ↑</span></div>
-        <div class="breadth-value neg">${down??'···'}<span style="font-size:10px;font-weight:400;color:var(--text3)"> ↓</span></div>
-      </div>
-      <div class="ad-bar"><div class="ad-bar-up" style="width:${upP}%"></div><div class="ad-bar-dn" style="width:${100-upP}%"></div></div>
-      <div class="breadth-sub">${tot>0?Math.round(upP)+'% advancing':'computing···'}</div>
-    </div>
-    <div class="breadth-card">
-      <div class="breadth-card-title">% Above 20-Day MA</div>
-      <div class="breadth-value ${cls20}">${above20!=null?above20.toFixed(1)+'%':'···'}</div>
-      <div class="gauge-track"><div class="gauge-fill ${above20!=null?gaugeColor(above20):''}" style="width:${above20??0}%"></div></div>
-      <div class="gauge-zones"><span>0</span><span style="color:var(--gold)">50</span><span>100</span></div>
-      <div class="breadth-sub">${above20!=null?(above20>=70?'Short-term strong':above20>=50?'Bullish momentum':above20>=30?'Bearish momentum':'Short-term weak'):'computing···'}</div>
-    </div>
-    <div class="breadth-card">
-      <div class="breadth-card-title">% Above 50-Day MA</div>
-      <div class="breadth-value ${cls50}">${above50!=null?above50.toFixed(1)+'%':'···'}</div>
-      <div class="gauge-track"><div class="gauge-fill ${above50!=null?gaugeColor(above50):''}" style="width:${above50??0}%"></div></div>
-      <div class="gauge-zones"><span>0</span><span style="color:var(--gold)">50</span><span>100</span></div>
-      <div class="breadth-sub">${above50!=null?(above50>=70?'Overbought':above50>=50?'Bullish':above50>=30?'Bearish':'Oversold'):'computing···'}</div>
-    </div>
-    <div class="breadth-card">
-      <div class="breadth-card-title">% Above 200-Day MA</div>
-      <div class="breadth-value ${cls200}">${above200!=null?above200.toFixed(1)+'%':'···'}</div>
-      <div class="gauge-track"><div class="gauge-fill ${above200!=null?gaugeColor(above200):''}" style="width:${above200??0}%"></div></div>
-      <div class="gauge-zones"><span>0</span><span style="color:var(--gold)">50</span><span>100</span></div>
-      <div class="breadth-sub">${above200!=null?(above200>=70?'Long-term strong':above200>=50?'Majority in uptrend':above200>=30?'Majority in downtrend':'Long-term weak'):'computing···'}</div>
-    </div>
-    <div class="breadth-card">
-      <div class="breadth-card-title">52-Week Highs</div>
-      <div class="breadth-value ${clsH}">${highs??'···'}</div>
-      <div class="breadth-sub">${highs!=null?'near 52-week high':'computing···'}</div>
-    </div>
-    <div class="breadth-card">
-      <div class="breadth-card-title">52-Week Lows</div>
-      <div class="breadth-value ${clsL}">${lows??'···'}</div>
-      <div class="breadth-sub">${lows!=null?'near 52-week low':'computing···'}</div>
-    </div>`;
+  document.getElementById('breadthGrid').innerHTML =
+    '<div class="breadth-card"><div class="breadth-card-title">Advance / Decline</div>' +
+      '<div style="display:flex;gap:10px;align-items:baseline;margin-bottom:4px">' +
+        '<div class="breadth-value pos">' + (up??'···') + '<span style="font-size:10px;font-weight:400;color:var(--text3)"> \u2191</span></div>' +
+        '<div class="breadth-value neg">' + (down??'···') + '<span style="font-size:10px;font-weight:400;color:var(--text3)"> \u2193</span></div>' +
+      '</div>' +
+      '<div class="ad-bar"><div class="ad-bar-up" style="width:' + upP + '%"></div><div class="ad-bar-dn" style="width:' + (100-upP) + '%"></div></div>' +
+      '<div class="breadth-sub">' + (tot>0?Math.round(upP)+'% advancing':'computing\u22ef') + '</div></div>' +
+    '<div class="breadth-card"><div class="breadth-card-title">% Above 20-Day MA</div><div class="breadth-value ' + cls20 + '">' + (above20!=null?above20.toFixed(1)+'%':'···') + '</div><div class="gauge-track"><div class="gauge-fill ' + (above20!=null?gaugeColor(above20):'') + '" style="width:' + (above20??0) + '%"></div></div><div class="gauge-zones"><span>0</span><span style="color:var(--gold)">50</span><span>100</span></div><div class="breadth-sub">' + (above20!=null?(above20>=70?'Short-term strong':above20>=50?'Bullish momentum':above20>=30?'Bearish momentum':'Short-term weak'):'computing\u22ef') + '</div></div>' +
+    '<div class="breadth-card"><div class="breadth-card-title">% Above 50-Day MA</div><div class="breadth-value ' + cls50 + '">' + (above50!=null?above50.toFixed(1)+'%':'···') + '</div><div class="gauge-track"><div class="gauge-fill ' + (above50!=null?gaugeColor(above50):'') + '" style="width:' + (above50??0) + '%"></div></div><div class="gauge-zones"><span>0</span><span style="color:var(--gold)">50</span><span>100</span></div><div class="breadth-sub">' + (above50!=null?(above50>=70?'Overbought':above50>=50?'Bullish':above50>=30?'Bearish':'Oversold'):'computing\u22ef') + '</div></div>' +
+    '<div class="breadth-card"><div class="breadth-card-title">% Above 200-Day MA</div><div class="breadth-value ' + cls200 + '">' + (above200!=null?above200.toFixed(1)+'%':'···') + '</div><div class="gauge-track"><div class="gauge-fill ' + (above200!=null?gaugeColor(above200):'') + '" style="width:' + (above200??0) + '%"></div></div><div class="gauge-zones"><span>0</span><span style="color:var(--gold)">50</span><span>100</span></div><div class="breadth-sub">' + (above200!=null?(above200>=70?'Long-term strong':above200>=50?'Majority in uptrend':above200>=30?'Majority in downtrend':'Long-term weak'):'computing\u22ef') + '</div></div>' +
+    '<div class="breadth-card"><div class="breadth-card-title">52-Week Highs</div><div class="breadth-value ' + clsH + '">' + (highs??'···') + '</div><div class="breadth-sub">' + (highs!=null?'near 52-week high':'computing\u22ef') + '</div></div>' +
+    '<div class="breadth-card"><div class="breadth-card-title">52-Week Lows</div><div class="breadth-value ' + clsL + '">' + (lows??'···') + '</div><div class="breadth-sub">' + (lows!=null?'near 52-week low':'computing\u22ef') + '</div></div>';
 }
 
 function computeMA(closes, period) {
@@ -648,9 +575,10 @@ function recomputeBreadth() {
     if (cl.length < 20) continue;
     tot++;
     const p=cl[cl.length-1], h52=Math.max(...cl.slice(-252)), l52=Math.min(...cl.slice(-252));
-    if (computeMA(cl,20)!=null && p>computeMA(cl,20))  a20++;
-    if (computeMA(cl,50)!=null && p>computeMA(cl,50))  a50++;
-    if (computeMA(cl,200)!=null && p>computeMA(cl,200)) a200++;
+    const ma20=computeMA(cl,20), ma50=computeMA(cl,50), ma200=computeMA(cl,200);
+    if (ma20  && p>ma20)  a20++;
+    if (ma50  && p>ma50)  a50++;
+    if (ma200 && p>ma200) a200++;
     if (p>=h52*0.99) hi++;
     if (p<=l52*1.01) lo++;
   }
@@ -661,7 +589,7 @@ function recomputeBreadth() {
     breadthState.highs = hi; breadthState.lows = lo;
     renderBreadth();
     const ts = document.getElementById('breadthTimestamp');
-    if (ts) ts.textContent = `${tot}/${ALL_HOLDING_SYMS.length} computed`;
+    if (ts) ts.textContent = tot + '/' + ALL_HOLDING_SYMS.length + ' computed';
   }
 }
 
@@ -670,39 +598,32 @@ async function loadBreadth(force=false) {
   if (!force && breadthState.lastComputed && Date.now()-breadthState.lastComputed < CACHE_MS) { renderBreadth(); return; }
   if (breadthComputing) return;
   breadthComputing = true;
-
-  const btn = document.getElementById('breadthBtn');
-  btn.classList.add('computing');
-
+  document.getElementById('breadthBtn').classList.add('computing');
   Object.assign(breadthState, {above20:null,above50:null,above200:null,highs:null,lows:null,lastComputed:null});
   for (const k of Object.keys(holdingHistory)) delete holdingHistory[k];
   renderBreadth();
-
-  await Promise.all(ALL_HOLDING_SYMS.map(async sym => {
+  await staggered(ALL_HOLDING_SYMS, async (sym) => {
     try {
       const closes = await fetchQuoteHistory(sym,'1y');
       holdingHistory[sym] = { closes, loaded:true };
     } catch { holdingHistory[sym] = { closes:[], loaded:true }; }
     recomputeBreadth();
-  }));
-
+  }, 80);
   breadthState.lastComputed = Date.now();
   breadthComputing = false;
-  btn.classList.remove('computing');
+  document.getElementById('breadthBtn').classList.remove('computing');
   document.getElementById('breadthTimestamp').textContent =
-    'COMPUTED ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) + ' · REFRESHES HOURLY';
+    'COMPUTED ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) + ' \u00b7 REFRESHES HOURLY';
 }
 
 document.getElementById('breadthBtn').addEventListener('click', () => {
   breadthVisible = !breadthVisible;
-  const panel = document.getElementById('breadthPanel');
-  const btn   = document.getElementById('breadthBtn');
-  panel.classList.toggle('visible', breadthVisible);
-  btn.classList.toggle('active', breadthVisible);
+  document.getElementById('breadthPanel').classList.toggle('visible', breadthVisible);
+  document.getElementById('breadthBtn').classList.toggle('active', breadthVisible);
   if (breadthVisible) loadBreadth();
 });
 
-// ─── WATCHLIST (1D only, fires after themes) ──────────────────────────────────
+// ─── WATCHLIST ────────────────────────────────────────────────────────────────
 const WATCHLIST = [
   { group:'DRONES & DEFENSE', color:'#ef9a9a', tickers:['ONDS','RCAT','KTOS','AVAV','UMAC','LASR','LPTH','OUST','FEIM','DPRO'] },
   { group:'PHOTONICS',        color:'#80cbc4', tickers:['LITE','COHR','AAOI','GLW','FN','POET','MTSI','TSEM'] },
@@ -718,15 +639,15 @@ function renderWatchlist() {
   if (!body) return;
   let html = '';
   for (const grp of WATCHLIST) {
-    html += `<div class="watchlist-group-label" style="color:${grp.color}">${grp.group}</div>`;
+    html += '<div class="watchlist-group-label" style="color:' + grp.color + '">' + grp.group + '</div>';
     for (const sym of grp.tickers) {
       const d = wlData[sym] || {};
       const cls = wlClass(d.d1);
-      const val = d.d1!=null ? (d.d1>=0?'+':'')+d.d1.toFixed(1)+'%' : '···';
-      html += `<div class="watchlist-row" onclick="window.open('${tvUrl(sym)}','_blank')">
-        <div class="w-ticker">${sym}</div>
-        <div class="w-val ${cls}">${val}</div>
-      </div>`;
+      const val = d.d1!=null ? (d.d1>=0?'+':'') + d.d1.toFixed(1) + '%' : '\u22ef\u22ef\u22ef';
+      html += '<div class="watchlist-row" onclick="window.open(\'' + tvUrl(sym) + '\',\'_blank\')">' +
+        '<div class="w-ticker">' + sym + '</div>' +
+        '<div class="w-val ' + cls + '">' + val + '</div>' +
+      '</div>';
     }
   }
   body.innerHTML = html;
@@ -736,13 +657,14 @@ async function loadWatchlist() {
   const syms = [...new Set(WATCHLIST.flatMap(g=>g.tickers))];
   for (const sym of syms) wlData[sym] = { d1:null };
   renderWatchlist();
-  await Promise.all(syms.map(async sym => {
+  // Stagger 80ms — starts concurrently with ETF load but won't burst Yahoo
+  await staggered(syms, async (sym) => {
     try {
       const q = await fetchQuote1D(sym);
       wlData[sym] = { d1: q.changePercent ?? null };
     } catch(e) { console.warn('[wl]',sym,e.message); }
     renderWatchlist();
-  }));
+  }, 80);
 }
 
 // ─── CONTROLS ─────────────────────────────────────────────────────────────────
@@ -757,8 +679,6 @@ document.getElementById('refreshBtn').addEventListener('click', () => {
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 renderBarChart();
 renderWatchlist();
-
-// All parallel — fetchOne has built-in retry so no ordering dependency needed
 loadMarketOverview();
 loadAll();
 loadWatchlist();
