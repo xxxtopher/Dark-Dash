@@ -546,7 +546,7 @@
     grid-column: 1 / -1;
   }
 
-
+  .main-content { padding-bottom: 36px; }
 
   /* Scrollbar */
   ::-webkit-scrollbar { width: 4px; }
@@ -559,7 +559,7 @@
     border-bottom: 1px solid var(--border);
     padding: 8px 28px;
     display: grid;
-    grid-template-columns: 1fr 1fr 180px 180px;
+    grid-template-columns: 1fr 1fr auto;
     gap: 10px;
     align-items: stretch;
   }
@@ -568,8 +568,8 @@
     background: var(--bg3);
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 3px 6px;
-    min-height: 10px;
+    padding: 3px 7px;
+    min-height: 12px;
     display: flex;
     flex-direction: column;
   }
@@ -582,9 +582,9 @@
   }
 
   .market-chart-title {
-    font-size: 6.5px;
+    font-size: 7px;
     color: var(--text3);
-    letter-spacing: 0.8px;
+    letter-spacing: 1px;
     text-transform: uppercase;
   }
 
@@ -593,14 +593,14 @@
   }
 
   .market-chart-value {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 600;
     color: var(--text);
     letter-spacing: -0.3px;
   }
 
   .market-chart-pct {
-    font-size: 6.5px;
+    font-size: 7px;
     font-weight: 600;
     margin-top: 0px;
   }
@@ -612,7 +612,7 @@
   .chart-canvas-wrap {
     flex: 1;
     position: relative;
-    min-height: 55px;
+    min-height: 20px;
   }
 
   .chart-canvas-wrap canvas {
@@ -626,26 +626,26 @@
     background: var(--bg3);
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 8px 10px;
-    min-width: 0;
+    padding: 8px 14px;
+    min-width: 260px;
     display: flex;
     flex-direction: column;
   }
 
   .ranking-title {
-    font-size: 9px;
+    font-size: 10px;
     color: var(--text3);
     letter-spacing: 1.5px;
     text-transform: uppercase;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
   }
 
   .ranking-section-label {
-    font-size: 11px;
+    font-size: 13px;
     letter-spacing: 1px;
     text-transform: uppercase;
-    margin: 4px 0 2px;
-    padding-bottom: 2px;
+    margin: 6px 0 3px;
+    padding-bottom: 3px;
     border-bottom: 1px solid var(--border);
   }
 
@@ -656,21 +656,21 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 2px 0;
+    padding: 3px 0;
   }
 
   .ranking-name {
-    font-size: 12px;
+    font-size: 14px;
     color: var(--text);
     letter-spacing: 0.3px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 110px;
+    max-width: 170px;
   }
 
   .ranking-pct {
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 600;
     letter-spacing: -0.3px;
     flex-shrink: 0;
@@ -686,72 +686,9 @@
     margin: 4px 0;
   }
 
-  /* Stock performers panel — same shape as theme-ranking */
-  .stock-ranking {
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 8px 10px;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-  }
-
-  .stock-ranking-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 3px 0;
-    cursor: pointer;
-    border-radius: 3px;
-    transition: background 0.1s;
-  }
-
-  .stock-ranking-row:hover { background: rgba(255,255,255,0.04); }
-
-  .sr-left {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    overflow: hidden;
-  }
-
-  .sr-ticker {
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--text);
-    letter-spacing: 0.4px;
-  }
-
-  .sr-theme {
-    font-size: 7px;
-    color: var(--text3);
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 100px;
-  }
-
-  .sr-pct {
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: -0.4px;
-    flex-shrink: 0;
-  }
-
-  .sr-pct.pos { color: var(--green); }
-  .sr-pct.neg { color: var(--red); }
-  .sr-pct.loading { color: var(--text3); font-size: 10px; font-weight: 400; animation: shimmer 1.5s infinite; }
-
-  @media (max-width: 1200px) {
-    .market-overview { grid-template-columns: 1fr 1fr 160px 160px; }
-  }
-
   @media (max-width: 900px) {
     .market-overview { grid-template-columns: 1fr 1fr; }
-    .theme-ranking, .stock-ranking { display: none; }
+    .theme-ranking { display: none; }
   }
 
   @media (max-width: 600px) {
@@ -860,116 +797,6 @@
     margin-top: 3px;
   }
 
-  /* ── Watchlist ──────────────────────────────────────────────────── */
-  .content-wrap {
-    display: flex;
-    align-items: stretch;
-  }
-
-  .watchlist-panel {
-    width: 280px;
-    flex-shrink: 0;
-    background: var(--bg2);
-    border-right: 1px solid var(--border);
-    overflow-y: visible;
-  }
-
-  .watchlist-panel::-webkit-scrollbar { width: 4px; }
-  .watchlist-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
-  .watchlist-header {
-    position: sticky;
-    top: 0;
-    background: var(--bg2);
-    z-index: 2;
-    padding: 10px 14px 6px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .watchlist-title {
-    font-size: 9px;
-    color: var(--text3);
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    margin-bottom: 6px;
-  }
-
-  .watchlist-cols {
-    display: grid;
-    grid-template-columns: 52px 1fr 1fr 1fr;
-    gap: 2px;
-    padding: 0 2px;
-  }
-
-  .wcol-label {
-    font-size: 7.5px;
-    color: var(--text3);
-    letter-spacing: 0.8px;
-    text-transform: uppercase;
-    text-align: right;
-  }
-
-  .wcol-label:first-child { text-align: left; }
-
-  .watchlist-group-label {
-    font-size: 8px;
-    color: var(--text3);
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    padding: 7px 14px 3px;
-    background: var(--bg2);
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .watchlist-group-label::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: var(--border);
-  }
-
-  .watchlist-row {
-    display: grid;
-    grid-template-columns: 52px 1fr 1fr 1fr;
-    gap: 2px;
-    padding: 4px 14px;
-    border-bottom: 1px solid rgba(255,255,255,0.03);
-    cursor: pointer;
-    transition: background 0.12s;
-    align-items: center;
-  }
-
-  .watchlist-row:hover { background: var(--bg3); }
-
-  .w-ticker {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text);
-    letter-spacing: 0.3px;
-    text-transform: uppercase;
-  }
-
-  .w-val {
-    font-size: 10.5px;
-    font-weight: 600;
-    text-align: right;
-    letter-spacing: -0.2px;
-  }
-
-  .w-val.pos  { color: var(--green); }
-  .w-val.neg  { color: var(--red); }
-  .w-val.flat { color: var(--text3); }
-  .w-val.loading { color: var(--text3); font-size: 9px; font-weight: 400; animation: shimmer 1.5s infinite; }
-
-  .main-content {
-    flex: 1;
-    min-width: 0;
-    padding-bottom: 36px;
-  }
-
   /* Responsive */
   @media (max-width: 900px) {
     .breadth-grid { grid-template-columns: repeat(3, 1fr); }
@@ -1055,26 +882,6 @@
       <div class="ranking-row"><span class="ranking-name">—</span><span class="ranking-pct loading">···</span></div>
     </div>
   </div>
-
-  <!-- Stock performers -->
-  <div class="stock-ranking">
-    <div class="ranking-title">▸ Stock Movers · <span id="stockRankingTf">1D</span></div>
-    <div id="stockRankingTable">
-      <div class="ranking-section-label top">▲ Top Stocks</div>
-      <div class="stock-ranking-row"><div class="sr-left"><span class="sr-ticker">—</span></div><span class="sr-pct loading">···</span></div>
-      <div class="stock-ranking-row"><div class="sr-left"><span class="sr-ticker">—</span></div><span class="sr-pct loading">···</span></div>
-      <div class="stock-ranking-row"><div class="sr-left"><span class="sr-ticker">—</span></div><span class="sr-pct loading">···</span></div>
-      <div class="stock-ranking-row"><div class="sr-left"><span class="sr-ticker">—</span></div><span class="sr-pct loading">···</span></div>
-      <div class="stock-ranking-row"><div class="sr-left"><span class="sr-ticker">—</span></div><span class="sr-pct loading">···</span></div>
-      <hr class="ranking-divider">
-      <div class="ranking-section-label bot">▼ Bottom Stocks</div>
-      <div class="stock-ranking-row"><div class="sr-left"><span class="sr-ticker">—</span></div><span class="sr-pct loading">···</span></div>
-      <div class="stock-ranking-row"><div class="sr-left"><span class="sr-ticker">—</span></div><span class="sr-pct loading">···</span></div>
-      <div class="stock-ranking-row"><div class="sr-left"><span class="sr-ticker">—</span></div><span class="sr-pct loading">···</span></div>
-      <div class="stock-ranking-row"><div class="sr-left"><span class="sr-ticker">—</span></div><span class="sr-pct loading">···</span></div>
-      <div class="stock-ranking-row"><div class="sr-left"><span class="sr-ticker">—</span></div><span class="sr-pct loading">···</span></div>
-    </div>
-  </div>
 </div>
 
 <!-- MARKET BREADTH PANEL -->
@@ -1094,29 +901,8 @@
   </div>
 </div>
 
-<div class="content-wrap">
-
-  <!-- WATCHLIST -->
-  <div class="watchlist-panel" id="watchlistPanel">
-    <div class="watchlist-header">
-      <div class="watchlist-title">▸ Watchlist</div>
-      <div class="watchlist-cols">
-        <div class="wcol-label">Ticker</div>
-        <div class="wcol-label">1D</div>
-        <div class="wcol-label">5D</div>
-        <div class="wcol-label">52W↓</div>
-      </div>
-    </div>
-    <div id="watchlistBody">
-      <!-- rendered by JS -->
-    </div>
-  </div>
-
-  <!-- THEME GRID -->
-  <div class="main-content">
-    <div class="grid" id="themeGrid"></div>
-  </div>
-
+<div class="main-content">
+  <div class="grid" id="themeGrid"></div>
 </div>
 
 <div class="modal-overlay" id="modalOverlay">
@@ -1146,8 +932,8 @@
 
 <div class="status-bar">
   <div class="status-left">
-    <div class="status-item">THEMES <span id="statusLoaded">0</span>/26</div>
-    <div class="status-item">SOURCE <span>YAHOO FINANCE</span> · <span id="statusProxy">via corsproxy.io</span></div>
+    <div class="status-item">THEMES <span id="statusLoaded">0</span>/23</div>
+    <div class="status-item">SOURCE <span>YAHOO FINANCE</span></div>
   </div>
   <div class="status-item">DATA MAY BE DELAYED 15–20 MIN</div>
 </div>
@@ -1325,14 +1111,6 @@ const THEMES = [
     holdings: ['JPM','BAC','WFC','GS','MS','BLK','AXP','SPGI','MCO','CME']
   },
   {
-    id: 'nonbank',
-    name: 'NON-BANK FINANCIALS',
-    etf: 'KBWP',
-    color: '#b39ddb',
-    category: 'FINANCIALS',
-    holdings: ['V','MA','PYPL','SQ','COIN','HOOD','SOFI','AFRM','UPST','LC','OMF','ALLY','COF','DFS','SYF','CACC','TREE','RATE']
-  },
-  {
     id: 'oil',
     name: 'OIL & GAS',
     etf: 'XOP',
@@ -1347,109 +1125,53 @@ const THEMES = [
     color: '#4fc3f7',
     category: 'CONSUMER',
     holdings: ['BKNG','ABNB','EXPE','MAR','HLT','CCL','RCL','DAL','UAL','LUV']
-  },
-  {
-    id: 'printing3d',
-    name: '3D PRINTING',
-    etf: 'PRNT',
-    color: '#f48fb1',
-    category: 'TECHNOLOGY',
-    holdings: ['VELO','SSYS','DDD','NNDM','PRLB','XMTR','MTLS','HPQ','ADSK','PTC','SNPS','LHX','MOG.A','LECO']
-  },
-  {
-    id: 'neocloud',
-    name: 'AI NEOCLOUD',
-    etf: 'CLOD',
-    color: '#80cbc4',
-    category: 'TECHNOLOGY',
-    holdings: ['NBIS','CRWV','IREN','APLD','WULF','CIFR','DOCN','DLR','EQIX','DBRG','GTLB','SNOW','AKAM','NET','FSLY']
   }
 ];
 
-// ─── FETCH LAYER ──────────────────────────────────────────────────────────────
-// CONFIRMED WORKING (from browser diagnostic):
-//   allorigins/raw  → WORKS, 20 concurrent in 135ms, all ranges intact
-//   corsproxy.io    → HTTP 403 blocked
-//   thingproxy      → Failed to fetch
-//   v7 batch        → returns empty through allorigins
-//   KEY BUG: regularMarketChangePercent absent from meta — must calculate from
-//            (regularMarketPrice - chartPreviousClose) / chartPreviousClose
-//
-// STRATEGY: allorigins/raw + v8/chart per symbol + all symbols fully parallel
+// ─── CORS PROXY ───────────────────────────────────────────────────────────────
 
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+const PROXIES = [
+  url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+];
+
+let activeProxy = 0;
+
+async function fetchWithProxy(url) {
+  for (let i = 0; i < PROXIES.length; i++) {
+    const proxyIdx = (activeProxy + i) % PROXIES.length;
+    try {
+      const proxied = PROXIES[proxyIdx](url);
+      const res = await fetch(proxied, { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      activeProxy = proxyIdx;
+      return data;
+    } catch (e) {
+      if (i === PROXIES.length - 1) throw e;
+    }
+  }
+}
+
+// ─── YAHOO FINANCE ────────────────────────────────────────────────────────────
 
 const YF_BASE = 'https://query2.finance.yahoo.com';
-const PROXY   = 'https://api.allorigins.win/raw?url=';
 
-async function fetchOne(url) {
-  const res = await fetch(PROXY + encodeURIComponent(url),
-    { signal: AbortSignal.timeout(12000) });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const text = await res.text();
-  if (!text || text.length < 20) throw new Error('empty');
-  return JSON.parse(text);
+async function fetchHistory(symbol, range) {
+  // range: '5d', '1mo', 'ytd'
+  const url = `${YF_BASE}/v8/finance/chart/${symbol}?range=${range}&interval=1d`;
+  const data = await fetchWithProxy(url);
+  const closes = data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close;
+  return closes || [];
 }
 
-// Fetch price+changePercent for one symbol via v8/chart meta
-async function fetchQuote1D(sym) {
-  const data = await fetchOne(
-    `${YF_BASE}/v8/finance/chart/${sym}?range=1d&interval=1d`);
-  const meta = data?.chart?.result?.[0]?.meta;
-  if (!meta) return { changePercent: null, price: null };
-  const price = meta.regularMarketPrice ?? null;
-  const prev  = meta.chartPreviousClose ?? meta.previousClose ?? null;
-  // regularMarketChangePercent is NOT in the response — calculate it
-  const changePercent = (price != null && prev != null && prev !== 0)
-    ? ((price - prev) / prev) * 100 : null;
-  return { price, changePercent };
-}
-
-// Fetch historical closes — all ranges work fine through allorigins
-async function fetchQuoteHistory(sym, range) {
-  const data = await fetchOne(
-    `${YF_BASE}/v8/finance/chart/${sym}?range=${range}&interval=1d`);
-  const closes = data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? [];
-  return closes.filter(v => v != null);
-}
-
-function calcPctChange(closes) {
-  if (closes.length < 2) return null;
-  return ((closes[closes.length - 1] - closes[0]) / closes[0]) * 100;
-}
-
-// Load all symbols fully in parallel — allorigins handles concurrent fine
-// Returns { [sym]: { changePercent, price } }
-async function fetchAllQuotes1D(symbols) {
-  const out = {};
-  await Promise.all(symbols.map(async sym => {
-    try { out[sym] = await fetchQuote1D(sym); }
-    catch { out[sym] = { changePercent: null, price: null }; }
-  }));
-  return out;
-}
-
-// Returns { [sym]: changePercent|null }
-async function fetchAllHistory(symbols, range) {
-  const out = {};
-  await Promise.all(symbols.map(async sym => {
-    try {
-      const closes = await fetchQuoteHistory(sym, range);
-      out[sym] = calcPctChange(closes);
-    } catch { out[sym] = null; }
-  }));
-  return out;
-}
-
-// Aliases for other callers (intraday candles, breadth, watchlist)
-async function fetchRaw(url) { return fetchOne(url); }
-async function fetchWithProxy(url) { return fetchOne(url); }
-async function fetchWithProxyThrottled(url) { return fetchOne(url); }
-async function fetchHistory(sym, range) { return fetchQuoteHistory(sym, range); }
-function calcChangeFromHistory(c) { return calcPctChange(c); }
-
-function checkProxies() {
-  document.getElementById('statusProxy').textContent = 'via allorigins.win';
+function calcChangeFromHistory(closes) {
+  if (!closes || closes.length < 2) return null;
+  const valid = closes.filter(v => v != null);
+  if (valid.length < 2) return null;
+  const first = valid[0];
+  const last = valid[valid.length - 1];
+  return ((last - first) / first) * 100;
 }
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
@@ -1623,8 +1345,28 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
 const TF_RANGE = { '1D': null, '5D': '5d', '1M': '1mo', 'YTD': 'ytd' };
 
 async function loadAll1D() {
+  // Collect all unique symbols across all themes
   const allSymbols = [...new Set(THEMES.flatMap(t => [t.etf, ...t.holdings]))];
-  const combined = await fetchAllQuotes1D(allSymbols);
+  const combined = {};
+
+  // Fire ALL requests concurrently — no batching, no sleeps
+  // Use interval=1d (tiny response) instead of 5m
+  await Promise.all(allSymbols.map(async sym => {
+    try {
+      const url = `${YF_BASE}/v8/finance/chart/${sym}?range=1d&interval=1d`;
+      const data = await fetchWithProxy(url);
+      const meta = data?.chart?.result?.[0]?.meta;
+      if (!meta) { combined[sym] = { changePercent: null, price: null }; return; }
+      const price     = meta.regularMarketPrice ?? null;
+      const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? null;
+      combined[sym] = {
+        changePercent: (price != null && prevClose != null && prevClose !== 0)
+          ? ((price - prevClose) / prevClose) * 100 : null,
+        price,
+      };
+    } catch { combined[sym] = { changePercent: null, price: null }; }
+  }));
+
   applyQuotesToThemes(combined);
 }
 
@@ -1645,49 +1387,41 @@ function applyQuotesToThemes(combined) {
   renderGrid();
   updateBreadthAdLine();
   renderThemeRanking();
-  renderStockRanking();
 }
 
 async function loadAllHistorical() {
   const range = TF_RANGE[currentTf];
+
+  // Collect all unique symbols
   const allSymbols = [...new Set(THEMES.flatMap(t => [t.etf, ...t.holdings]))];
-
-  // Fire all in parallel — progressive render as ETF symbols complete
   const historyMap = {};
-  const etfSet = new Set(THEMES.map(t => t.etf));
 
+  // Fire ALL symbol requests concurrently
   await Promise.all(allSymbols.map(async sym => {
     try {
-      const closes = await fetchQuoteHistory(sym, range);
-      historyMap[sym] = calcPctChange(closes);
+      const closes = await fetchHistory(sym, range);
+      historyMap[sym] = calcChangeFromHistory(closes);
     } catch { historyMap[sym] = null; }
-
-    // Render immediately when any ETF resolves
-    if (etfSet.has(sym)) {
-      for (const theme of THEMES) {
-        if (!perfData[theme.id]) perfData[theme.id] = { etf: null, holdings: {}, prices: {} };
-        if (historyMap[theme.etf] !== undefined)
-          perfData[theme.id].etf = historyMap[theme.etf];
-        for (const s of theme.holdings)
-          if (historyMap[s] !== undefined) perfData[theme.id].holdings[s] = historyMap[s];
-      }
-      loadedCount = THEMES.filter(t => perfData[t.id]?.etf != null).length;
-      updateStatusBar(); renderGrid(); renderThemeRanking(); renderStockRanking();
-    }
   }));
 
-  // Final apply
+  // Distribute into perfData
   for (const theme of THEMES) {
     if (!perfData[theme.id]) perfData[theme.id] = { etf: null, holdings: {}, prices: {} };
-    perfData[theme.id].etf = historyMap[theme.etf] ?? null;
-    for (const sym of theme.holdings)
-      perfData[theme.id].holdings[sym] = historyMap[sym] ?? null;
+    const d = perfData[theme.id];
+    d.etf = historyMap[theme.etf] ?? null;
+    for (const sym of theme.holdings) {
+      d.holdings[sym] = historyMap[sym] ?? null;
+    }
+    loadedCount++;
   }
-  loadedCount = THEMES.filter(t => perfData[t.id]?.etf != null).length;
-  updateStatusBar(); renderGrid(); updateBreadthAdLine();
-  renderThemeRanking(); renderStockRanking();
+  updateStatusBar();
+  renderGrid();
+  updateBreadthAdLine();
+  renderThemeRanking();
   if (currentModalTheme) renderHoldings(currentModalTheme);
 }
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 async function loadAll() {
   loadedCount = 0;
@@ -1711,37 +1445,30 @@ async function loadAll() {
 // ─── MARKET OVERVIEW ─────────────────────────────────────────────────────────
 
 async function fetchIndexIntraday(symbol) {
-  // Fetch today's 5-min intraday OHLC data
+  // Fetch today's 5-min intraday data
   const url = `${YF_BASE}/v8/finance/chart/${symbol}?range=1d&interval=5m`;
-  const data = await fetchWithProxyThrottled(url);
+  const data = await fetchWithProxy(url);
   const result = data?.chart?.result?.[0];
   if (!result) return null;
-  const meta       = result.meta;
-  const quote      = result.indicators?.quote?.[0] ?? {};
-  const opens      = quote.open      ?? [];
-  const highs      = quote.high      ?? [];
-  const lows       = quote.low       ?? [];
-  const closes     = quote.close     ?? [];
+  const meta      = result.meta;
+  const closes    = result.indicators?.quote?.[0]?.close ?? [];
   const timestamps = result.timestamp ?? [];
-  const price      = meta.regularMarketPrice ?? null;
-  const prevClose  = meta.chartPreviousClose ?? meta.previousClose ?? null;
-  const changePct  = (price != null && prevClose != null && prevClose !== 0)
+  const price     = meta.regularMarketPrice ?? null;
+  const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? null;
+  const changePct = (price != null && prevClose != null && prevClose !== 0)
     ? ((price - prevClose) / prevClose) * 100 : null;
 
-  // Build candle array — skip bars where any OHLC value is null
-  const candles = [];
-  for (let i = 0; i < timestamps.length; i++) {
-    const o = opens[i], h = highs[i], l = lows[i], c = closes[i];
-    if (o != null && h != null && l != null && c != null) {
-      candles.push({ t: timestamps[i], o, h, l, c });
-    }
+  // Filter nulls
+  const points = [];
+  for (let i = 0; i < closes.length; i++) {
+    if (closes[i] != null) points.push({ t: timestamps[i], v: closes[i] });
   }
-  return { price, changePct, prevClose, candles };
+  return { price, changePct, prevClose, points };
 }
 
-function drawCandleChart(canvasId, candles, prevClose) {
+function drawMiniChart(canvasId, points, prevClose, isUp) {
   const canvas = document.getElementById(canvasId);
-  if (!canvas || !candles.length) return;
+  if (!canvas || !points.length) return;
   const wrap = canvas.parentElement;
   const W = wrap.clientWidth  || 300;
   const H = wrap.clientHeight || 60;
@@ -1750,41 +1477,44 @@ function drawCandleChart(canvasId, candles, prevClose) {
   const ctx = canvas.getContext('2d');
   ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
 
-  // ET offset for market hours
-  const now     = new Date();
-  const etNow   = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  const yr = etNow.getFullYear(), mo = etNow.getMonth(), dy = etNow.getDate();
-  const etOffset  = etNow.getTime() - now.getTime();
-  const openUTC   = new Date(yr, mo, dy,  9, 30, 0).getTime() - etOffset;
-  const closeUTC  = new Date(yr, mo, dy, 16,  0, 0).getTime() - etOffset;
-  const marketDur = closeUTC - openUTC;
+  // Market hours in Unix seconds (ET = UTC-5 in winter, UTC-4 in summer)
+  // Determine today's market open/close in UTC
+  const now = new Date();
+  const todayET = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const y = todayET.getFullYear(), mo = todayET.getMonth(), d = todayET.getDate();
+  // Market open 9:30am ET, close 4:00pm ET — convert to UTC timestamps (seconds)
+  const openET  = new Date(y, mo, d,  9, 30, 0);
+  const closeET = new Date(y, mo, d, 16,  0, 0);
+  // Adjust from local Date (which is in browser local time) to ET offset
+  const etOffset  = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' })).getTime() - now.getTime();
+  const openUTC   = openET.getTime()  - etOffset; // ms
+  const closeUTC  = closeET.getTime() - etOffset; // ms
+  const marketDur = closeUTC - openUTC; // total 6.5h in ms
 
-  // Layout — bottom LABEL_H for x-axis labels
+  // Layout: leave bottom LABEL_H px for time labels
   const LABEL_H = 14;
   const chartH  = H - LABEL_H;
-  const PAD_L = 2, PAD_R = 2;
-  const chartW = W - PAD_L - PAD_R;
+  const PAD_L   = 2, PAD_R = 2;
+  const chartW  = W - PAD_L - PAD_R;
 
+  // Map a UTC ms timestamp to x pixel
   const tToX = tsMs => PAD_L + ((tsMs - openUTC) / marketDur) * chartW;
 
-  // Price range across all candle highs/lows + prevClose
-  const allH = candles.map(c => c.h);
-  const allL = candles.map(c => c.l);
-  const minV = Math.min(...allL, prevClose ?? Infinity);
-  const maxV = Math.max(...allH, prevClose ?? -Infinity);
+  // Price range — include prevClose
+  const vals = points.map(p => p.v);
+  const minV = Math.min(...vals, prevClose ?? Infinity);
+  const maxV = Math.max(...vals, prevClose ?? -Infinity);
   const pRange = maxV - minV || 1;
-  const toY = v => chartH * 0.04 + (1 - (v - minV) / pRange) * chartH * 0.88;
+  const toY = v => (chartH * 0.05) + (1 - (v - minV) / pRange) * (chartH * 0.88);
 
-  // Candle width: base on 5-min slots in 6.5h session = 78 slots
-  const slotW  = chartW / 78;
-  const bodyW  = Math.max(1.5, slotW * 0.6);
+  const color = isUp ? '#00e676' : '#ff4444';
 
   // ── Prev close baseline ──
   if (prevClose != null) {
     const baseY = toY(prevClose);
     ctx.beginPath();
     ctx.setLineDash([3, 4]);
-    ctx.strokeStyle = 'rgba(100,130,150,0.4)';
+    ctx.strokeStyle = 'rgba(100,130,150,0.35)';
     ctx.lineWidth = 1;
     ctx.moveTo(PAD_L, baseY);
     ctx.lineTo(PAD_L + chartW, baseY);
@@ -1792,45 +1522,50 @@ function drawCandleChart(canvasId, candles, prevClose) {
     ctx.setLineDash([]);
   }
 
-  // ── Draw candles ──
-  for (const c of candles) {
-    const cx    = tToX(c.t * 1000);
-    const isGreen = c.c >= c.o;
-    const color   = isGreen ? '#00e676' : '#ff4444';
-    const wickColor = isGreen ? 'rgba(0,230,118,0.55)' : 'rgba(255,68,68,0.55)';
+  // ── Gradient fill ──
+  const grad = ctx.createLinearGradient(0, 0, 0, chartH);
+  grad.addColorStop(0, isUp ? 'rgba(0,230,118,0.18)' : 'rgba(255,68,68,0.18)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
 
-    const openY  = toY(c.o);
-    const closeY = toY(c.c);
-    const highY  = toY(c.h);
-    const lowY   = toY(c.l);
-    const bodyTop    = Math.min(openY, closeY);
-    const bodyBottom = Math.max(openY, closeY);
-    const bodyHeight = Math.max(1, bodyBottom - bodyTop);
-
-    // Wick
-    ctx.beginPath();
-    ctx.strokeStyle = wickColor;
-    ctx.lineWidth = 1;
-    ctx.moveTo(cx, highY);
-    ctx.lineTo(cx, lowY);
-    ctx.stroke();
-
-    // Body
-    ctx.fillStyle = color;
-    ctx.fillRect(cx - bodyW / 2, bodyTop, bodyW, bodyHeight);
-  }
-
-  // ── Dot on last close ──
-  const last = candles[candles.length - 1];
-  const dotX = tToX(last.t * 1000);
-  const dotY = toY(last.c);
-  const dotColor = last.c >= last.o ? '#00e676' : '#ff4444';
   ctx.beginPath();
-  ctx.arc(dotX, dotY, 2.5, 0, Math.PI * 2);
-  ctx.fillStyle = dotColor;
+  let started = false;
+  for (const p of points) {
+    const x = tToX(p.t * 1000);
+    const y = toY(p.v);
+    if (!started) { ctx.moveTo(x, y); started = true; }
+    else ctx.lineTo(x, y);
+  }
+  const lastX = tToX(points[points.length - 1].t * 1000);
+  ctx.lineTo(lastX, chartH);
+  ctx.lineTo(tToX(points[0].t * 1000), chartH);
+  ctx.closePath();
+  ctx.fillStyle = grad;
   ctx.fill();
 
-  // ── X-axis time labels every 2 hours ──
+  // ── Price line ──
+  ctx.beginPath();
+  started = false;
+  for (const p of points) {
+    const x = tToX(p.t * 1000);
+    const y = toY(p.v);
+    if (!started) { ctx.moveTo(x, y); started = true; }
+    else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  // ── Dot at latest price ──
+  const lastPt  = points[points.length - 1];
+  const dotX = tToX(lastPt.t * 1000);
+  const dotY = toY(lastPt.v);
+  ctx.beginPath();
+  ctx.arc(dotX, dotY, 2.5, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+
+  // ── X-axis time labels every 2 hours: 9:30, 11:30, 1:30, 3:30 ──
   const labelTimes = [
     { h: 9,  m: 30, label: '9:30'  },
     { h: 11, m: 30, label: '11:30' },
@@ -1838,21 +1573,27 @@ function drawCandleChart(canvasId, candles, prevClose) {
     { h: 15, m: 30, label: '3:30'  },
     { h: 16, m: 0,  label: '4:00'  },
   ];
+
+  ctx.font = `${7 * window.devicePixelRatio / window.devicePixelRatio}px "IBM Plex Mono", monospace`;
   ctx.font = '7px "IBM Plex Mono", monospace';
   ctx.fillStyle = 'rgba(100,130,150,0.6)';
   ctx.textAlign = 'center';
 
   for (const lt of labelTimes) {
-    const ltUTC = new Date(yr, mo, dy, lt.h, lt.m, 0).getTime() - etOffset;
-    const lx    = tToX(ltUTC);
+    const ltDate = new Date(y, mo, d, lt.h, lt.m, 0);
+    const ltUTC  = ltDate.getTime() - etOffset;
+    const lx     = tToX(ltUTC);
     if (lx < PAD_L || lx > PAD_L + chartW) continue;
+
+    // Tick mark
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(100,130,150,0.2)';
+    ctx.strokeStyle = 'rgba(100,130,150,0.25)';
     ctx.lineWidth = 1;
     ctx.moveTo(lx, chartH);
     ctx.lineTo(lx, chartH + 3);
     ctx.stroke();
-    ctx.fillStyle = 'rgba(100,130,150,0.6)';
+
+    // Label
     ctx.fillText(lt.label, lx, H - 2);
   }
 }
@@ -1895,41 +1636,6 @@ function renderThemeRanking() {
   `;
 }
 
-function renderStockRanking() {
-  // Collect all holding % changes across every theme
-  const all = [];
-  for (const theme of THEMES) {
-    const holdings = perfData[theme.id]?.holdings ?? {};
-    for (const [sym, pct] of Object.entries(holdings)) {
-      if (pct != null) all.push({ sym, pct, theme: theme.name });
-    }
-  }
-  if (!all.length) return;
-
-  all.sort((a, b) => b.pct - a.pct);
-  const top5 = all.slice(0, 5);
-  const bot5 = all.slice(-5).reverse();
-
-  const row = (s) => `
-    <div class="stock-ranking-row" onclick="window.open('https://www.tradingview.com/symbols/${s.sym}/','_blank')">
-      <div class="sr-left">
-        <span class="sr-ticker">${s.sym}</span>
-        <span class="sr-theme">${s.theme}</span>
-      </div>
-      <span class="sr-pct ${s.pct >= 0 ? 'pos' : 'neg'}">${s.pct >= 0 ? '+' : ''}${s.pct.toFixed(1)}%</span>
-    </div>`;
-
-  document.getElementById('stockRankingTable').innerHTML = `
-    <div class="ranking-section-label top">▲ Top Stocks</div>
-    ${top5.map(row).join('')}
-    <hr class="ranking-divider">
-    <div class="ranking-section-label bot">▼ Bottom Stocks</div>
-    ${bot5.map(row).join('')}
-  `;
-  const tfEl = document.getElementById('stockRankingTf');
-  if (tfEl) tfEl.textContent = currentTf;
-}
-
 async function loadMarketOverview() {
   const [spx, ndx] = await Promise.all([
     fetchIndexIntraday('%5EGSPC'),
@@ -1941,8 +1647,8 @@ async function loadMarketOverview() {
 
   // Draw after a brief tick so canvas has layout dimensions
   requestAnimationFrame(() => {
-    if (spx?.candles?.length) drawCandleChart('spxChart', spx.candles, spx.prevClose);
-    if (ndx?.candles?.length) drawCandleChart('ndxChart', ndx.candles, ndx.prevClose);
+    if (spx?.points?.length) drawMiniChart('spxChart', spx.points, spx.prevClose, spx.changePct >= 0);
+    if (ndx?.points?.length) drawMiniChart('ndxChart', ndx.points, ndx.prevClose, ndx.changePct >= 0);
   });
 }
 
@@ -2051,10 +1757,9 @@ function computeMA(closes, period) {
 async function fetchHoldingHistory(symbol) {
   if (holdingHistory[symbol]?.loaded) return holdingHistory[symbol].closes;
   try {
-    const data = await fetchOne(
-      `${YF_BASE}/v8/finance/chart/${symbol}?range=1y&interval=1d`);
-    const closes = (data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? [])
-      .filter(v => v != null);
+    const url = `${YF_BASE}/v8/finance/chart/${symbol}?range=1y&interval=1d`;
+    const data = await fetchWithProxy(url);
+    const closes = (data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? []).filter(v => v != null);
     holdingHistory[symbol] = { closes, loaded: true };
     return closes;
   } catch {
@@ -2113,11 +1818,14 @@ async function loadBreadth(force = false) {
   for (const k of Object.keys(holdingHistory)) delete holdingHistory[k];
   renderBreadth();
 
-  // Fire ALL holding history requests in parallel — progressive recompute as each resolves
-  await Promise.all(ALL_HOLDING_SYMS.map(async sym => {
-    await fetchHoldingHistory(sym);
+  // Fetch 1y history for all holdings in batches, compute progressively
+  const BATCH = 5;
+  for (let i = 0; i < ALL_HOLDING_SYMS.length; i += BATCH) {
+    const batch = ALL_HOLDING_SYMS.slice(i, i + BATCH);
+    await Promise.all(batch.map(sym => fetchHoldingHistory(sym)));
     recomputeBreadthFromCache();
-  }));
+    await sleep(150);
+  }
 
   breadthState.lastComputed = Date.now();
 }
@@ -2160,117 +1868,15 @@ document.getElementById('refreshBtn').addEventListener('click', () => {
   loadMarketOverview();
   loadAll();
   loadBreadth(true);
-  loadWatchlist();
 });
-
-// ─── WATCHLIST ────────────────────────────────────────────────────────────────
-
-const WATCHLIST = [
-  {
-    group: 'DRONES & DEFENSE',
-    color: '#ef9a9a',
-    tickers: ['ONDS','RCAT','KTOS','AVAV','UMAC','LASR','LPTH','OUST','FEIM','DPRO']
-  },
-  {
-    group: 'PHOTONICS',
-    color: '#80cbc4',
-    tickers: ['LITE','COHR','AAOI','GLW','FN','POET','MTSI','TSEM']
-  },
-  {
-    group: 'MEMORY',
-    color: '#ce93d8',
-    tickers: ['MU','SNDK','WDC','STX','CAMT','ONTO']
-  },
-  {
-    group: 'SEMICONDUCTOR EQUIP',
-    color: '#fff176',
-    tickers: ['AMAT','TER','KLAC','FORM','LRCX','AMKR']
-  }
-];
-
-// watchlist perf: { [sym]: { d1: null, d5: null, offHigh: null } }
-const wlData = {};
-
-function wlClass(v) {
-  if (v == null) return 'loading';
-  if (v > 0.05) return 'pos';
-  if (v < -0.05) return 'neg';
-  return 'flat';
-}
-
-function wlFmt(v, suffix = '%') {
-  if (v == null) return '···';
-  return (v >= 0 ? '+' : '') + v.toFixed(1) + suffix;
-}
-
-function renderWatchlist() {
-  const body = document.getElementById('watchlistBody');
-  if (!body) return;
-  let html = '';
-  for (const grp of WATCHLIST) {
-    html += `<div class="watchlist-group-label" style="color:${grp.color}">${grp.group}</div>`;
-    for (const sym of grp.tickers) {
-      const d = wlData[sym] || {};
-      const d1c  = wlClass(d.d1);
-      const d5c  = wlClass(d.d5);
-      const ohc  = d.offHigh != null ? (d.offHigh <= -20 ? 'neg' : d.offHigh <= -10 ? 'flat' : 'pos') : 'loading';
-      html += `
-        <div class="watchlist-row" onclick="window.open('https://www.tradingview.com/symbols/${sym}/','_blank')">
-          <div class="w-ticker">${sym}</div>
-          <div class="w-val ${d1c}">${wlFmt(d.d1)}</div>
-          <div class="w-val ${d5c}">${wlFmt(d.d5)}</div>
-          <div class="w-val ${ohc}">${d.offHigh != null ? wlFmt(d.offHigh) : '···'}</div>
-        </div>`;
-    }
-  }
-  body.innerHTML = html;
-}
-
-async function loadWatchlist() {
-  const allSyms = [...new Set(WATCHLIST.flatMap(g => g.tickers))];
-  for (const sym of allSyms) wlData[sym] = { d1: null, d5: null, offHigh: null };
-  renderWatchlist();
-
-  // Step 1: fetch all 1D quotes in parallel (same as theme cards — proven working)
-  await Promise.all(allSyms.map(async sym => {
-    try {
-      const q = await fetchQuote1D(sym);
-      wlData[sym].d1 = q.changePercent ?? null;
-      wlData[sym]._price = q.price ?? null;
-    } catch(e) { console.warn('[wl 1D]', sym, e.message); }
-  }));
-  renderWatchlist();
-
-  // Step 2: fetch 1y history for 5D% and 52W-high — in parallel after step 1
-  await Promise.all(allSyms.map(async sym => {
-    try {
-      const closes = await fetchQuoteHistory(sym, '1y');
-      const price = wlData[sym]._price ?? closes[closes.length - 1] ?? null;
-      const close5ago = closes.length >= 6 ? closes[closes.length - 6] : null;
-      const high52 = closes.length > 0 ? Math.max(...closes.slice(-252)) : null;
-      wlData[sym].d5 = (close5ago && price) ? ((price - close5ago) / close5ago) * 100 : null;
-      wlData[sym].offHigh = (high52 && price) ? ((price - high52) / high52) * 100 : null;
-    } catch(e) { console.warn('[wl 1y]', sym, e.message); }
-    renderWatchlist();
-  }));
-}
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 
 renderGrid();
 renderBreadth();
-renderWatchlist();
-
-// Run proxy label + market overview + themes in parallel first
-// Then load watchlist + breadth after themes complete (avoids allorigins rate limit)
-checkProxies();
-Promise.all([
-  loadMarketOverview(),
-  loadAll(),
-]).then(() => {
-  loadWatchlist();
-  loadBreadth();
-});
+loadMarketOverview();
+loadAll();
+loadBreadth();
 
 </script>
 </body>
