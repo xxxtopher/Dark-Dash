@@ -294,12 +294,22 @@ const THEMES = [
 ];
 
 // ─── FETCH ────────────────────────────────────────────────────────────────────
-// allorigins processes ONE request at a time — confirmed by diagnostics.
-// Sequential for-loop is the only reliable approach.
-// ~300ms per request × 56 total = ~17s to load everything.
+// Uses a Cloudflare Worker proxy (no rate limits, free tier 100k req/day).
+// To deploy: go to workers.cloudflare.com, create a worker, paste worker.js,
+// then replace WORKER_URL below with your worker's URL.
 
 const YF_BASE = 'https://query2.finance.yahoo.com';
-const PROXY   = u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u);
+
+// ▼▼▼ REPLACE THIS with your Cloudflare Worker URL after deploying ▼▼▼
+const WORKER_URL = 'https://yahoo-proxy.topherho.workers.dev';
+// ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+// Fallback to allorigins while worker is not configured (limited to ~13 req/min)
+const PROXY = WORKER_URL
+  ? url => `${WORKER_URL}?url=${encodeURIComponent(url)}`
+  : url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+
+const _delay = ms => new Promise(r => setTimeout(r, ms));
 
 async function fetchOne(url) {
   const res = await fetch(PROXY(url), { signal: AbortSignal.timeout(10000) });
@@ -309,10 +319,8 @@ async function fetchOne(url) {
   return JSON.parse(text);
 }
 
-const _delay = ms => new Promise(r => setTimeout(r, ms));
-
 async function fetchQuote1D(sym) {
-  await _delay(500);
+  if (!WORKER_URL) await _delay(500); // throttle only when using allorigins
   const data = await fetchOne(`${YF_BASE}/v8/finance/chart/${sym}?range=1d&interval=1d`);
   const meta = data?.chart?.result?.[0]?.meta;
   if (!meta) return { changePercent: null, price: null };
@@ -324,7 +332,7 @@ async function fetchQuote1D(sym) {
 }
 
 async function fetchQuoteHistory(sym, range) {
-  await _delay(500);
+  if (!WORKER_URL) await _delay(500);
   const data = await fetchOne(`${YF_BASE}/v8/finance/chart/${sym}?range=${range}&interval=1d`);
   const closes = data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? [];
   return closes.filter(v => v != null);
@@ -408,7 +416,7 @@ async function loadAll() {
   renderBarChart();
   document.getElementById('refreshBtn').classList.add('loading');
 
-  for (const theme of THEMES) {
+  const run = async (theme) => {
     try {
       const q = await fetchQuote1D(theme.etf);
       etfPerf[theme.id] = { pct: q.changePercent, price: q.price };
@@ -420,6 +428,12 @@ async function loadAll() {
     document.getElementById('statusLoaded').textContent = loadedCount;
     renderBarChart();
     renderThemeRanking();
+  };
+
+  if (WORKER_URL) {
+    await Promise.all(THEMES.map(run)); // parallel — worker has no rate limit
+  } else {
+    for (const theme of THEMES) await run(theme); // sequential — allorigins limit
   }
 
   document.getElementById('refreshBtn').classList.remove('loading');
@@ -639,14 +653,19 @@ async function loadWatchlist() {
   const syms = [...new Set(WATCHLIST.flatMap(g=>g.tickers))];
   for (const sym of syms) wlData[sym] = { d1:null };
   renderWatchlist();
-  for (const sym of syms) {
+
+  const run = async (sym) => {
     try {
       const q = await fetchQuote1D(sym);
       wlData[sym] = { d1: q.changePercent ?? null };
-    } catch(e) {
-      console.warn('[wl]', sym, e.message);
-    }
+    } catch(e) { console.warn('[wl]', sym, e.message); }
     renderWatchlist();
+  };
+
+  if (WORKER_URL) {
+    await Promise.all(syms.map(run));
+  } else {
+    for (const sym of syms) await run(sym);
   }
 }
 
