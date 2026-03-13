@@ -309,7 +309,10 @@ async function fetchOne(url) {
   return JSON.parse(text);
 }
 
+const _delay = ms => new Promise(r => setTimeout(r, ms));
+
 async function fetchQuote1D(sym) {
+  await _delay(500);
   const data = await fetchOne(`${YF_BASE}/v8/finance/chart/${sym}?range=1d&interval=1d`);
   const meta = data?.chart?.result?.[0]?.meta;
   if (!meta) return { changePercent: null, price: null };
@@ -321,6 +324,7 @@ async function fetchQuote1D(sym) {
 }
 
 async function fetchQuoteHistory(sym, range) {
+  await _delay(500);
   const data = await fetchOne(`${YF_BASE}/v8/finance/chart/${sym}?range=${range}&interval=1d`);
   const closes = data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? [];
   return closes.filter(v => v != null);
