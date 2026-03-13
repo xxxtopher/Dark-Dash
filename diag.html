@@ -1,88 +1,67 @@
 <!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><title>Proxy Hunt</title>
+<head><meta charset="UTF-8"><title>Rate Limit Diagnostic</title>
 <style>body{background:#0d1117;color:#c8d8e8;font-family:monospace;padding:20px;font-size:12px}
 .ok{color:#00e676}.fail{color:#ff4444}.warn{color:#ffd700}
-button{background:#1e2a38;color:#c8d8e8;border:1px solid #253040;padding:8px 16px;cursor:pointer;font-family:monospace;margin:4px;font-size:12px}
+button{background:#1e2a38;color:#c8d8e8;border:1px solid #253040;padding:8px 16px;cursor:pointer;font-family:monospace;margin:4px 2px;font-size:12px}
 </style></head>
 <body>
-<h2 style="color:#00b4ff">Proxy Hunt — find working proxies</h2>
-<button onclick="testAll()">Test all proxies for SPY</button>
-<button onclick="testWinners()">Test winners with 26 ETFs</button>
+<h2 style="color:#00b4ff">Rate Limit Diagnostic</h2>
+<p style="color:#6a8aa0">Run these IN ORDER, wait for each to finish before clicking next.</p>
+<button onclick="test1()">Test 1: 30 sequential, no delay</button>
+<button onclick="test2()">Test 2: 30 sequential, 1s delay</button>
+<button onclick="test3()">Test 3: 30 sequential, 2s delay</button>
+<button onclick="test4()">Test 4: How long to recover? (wait 60s then retry)</button>
 <div id="out"></div>
 <script>
 const log = (msg, cls='') => { document.getElementById('out').innerHTML += '<div class="'+cls+'">'+msg+'</div>'; };
-const TARGET = 'https://query2.finance.yahoo.com/v8/finance/chart/SPY?range=1d&interval=1d';
-const ETFS = ['URNM','REMX','COPX','GRID','XOP','SMH','AIQ','HACK','QTUM','BOTZ','BKCH','IGV','PRNT','CLOD','ITA','DRNZ','UFO','GDX','SIL','XRT','GLUX','XLP','AWAY','XBI','XLF','KBWP'];
+const PROXY = u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u);
+const YF = sym => 'https://query2.finance.yahoo.com/v8/finance/chart/'+sym+'?range=1d&interval=1d';
+const SYMS = ['URNM','REMX','COPX','GRID','XOP','SMH','AIQ','HACK','QTUM','BOTZ','BKCH','IGV','PRNT','CLOD','ITA','DRNZ','UFO','GDX','SIL','XRT','GLUX','XLP','AWAY','XBI','XLF','KBWP','MU','AMAT','KLAC','NVDA'];
 
-const PROXIES = [
-  { name:'allorigins /raw',  fn: u => 'https://api.allorigins.win/raw?url='+encodeURIComponent(u) },
-  { name:'allorigins /get',  fn: u => 'https://api.allorigins.win/get?url='+encodeURIComponent(u) },
-  { name:'corsproxy.io',     fn: u => 'https://corsproxy.io/?url='+encodeURIComponent(u) },
-  { name:'cors.sh',          fn: u => 'https://cors.sh/'+u },
-  { name:'thingproxy',       fn: u => 'https://thingproxy.freeboard.io/fetch/'+u },
-  { name:'codetabs',         fn: u => 'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u) },
-  { name:'jsonp.afeld',      fn: u => 'https://jsonp.afeld.me/?url='+encodeURIComponent(u) },
-  { name:'workers.dev (try)',fn: u => 'https://cors-proxy.htmldriven.com/?url='+encodeURIComponent(u) },
-  { name:'crossorigin.me',   fn: u => 'https://crossorigin.me/'+u },
-  { name:'allorigins.win/raw v2', fn: u => 'https://api.allorigins.win/raw?url='+encodeURIComponent(u)+'&_='+Date.now() },
-  { name:'gobetween (try)',  fn: u => 'https://gobetween.oklabs.org/pipe/'+encodeURIComponent(u) },
-  { name:'cors-anywhere herokuapp', fn: u => 'https://cors-anywhere.herokuapp.com/'+u },
-  { name:'yacdn',            fn: u => 'https://yacdn.org/proxy/'+u },
-  { name:'api.codetabs.com v2', fn: u => 'https://api.codetabs.com/v1/proxy/?quest='+encodeURIComponent(u) },
-  { name:'proxify (try)',    fn: u => 'https://proxy.cors.sh/'+u },
-];
-
-const winners = [];
-
-async function tryProxy(p, url) {
+async function fetchSym(sym) {
   try {
-    const res = await fetch(p.fn(url), {signal: AbortSignal.timeout(6000)});
-    if (!res.ok) return {ok:false, err:'HTTP '+res.status};
+    const res = await fetch(PROXY(YF(sym)), {signal: AbortSignal.timeout(8000)});
+    if (!res.ok) return null;
     const text = await res.text();
-    if (!text || text.length < 50) return {ok:false, err:'empty len='+text.length};
-    // unwrap if needed
-    let json;
-    try {
-      const t = text.startsWith('{"contents"') ? JSON.parse(text).contents : text;
-      json = JSON.parse(t);
-    } catch(e) { return {ok:false, err:'parse fail: '+text.slice(0,60)}; }
-    const price = json?.chart?.result?.[0]?.meta?.regularMarketPrice;
-    if (!price) return {ok:false, err:'no price in response'};
-    return {ok:true, price};
-  } catch(e) { return {ok:false, err:e.message}; }
+    if (!text || text.length < 50) return null;
+    return JSON.parse(text)?.chart?.result?.[0]?.meta?.regularMarketPrice ?? null;
+  } catch(e) { return null; }
 }
 
-async function testAll() {
-  log('<br>Testing all proxies with single SPY request...<br>');
-  winners.length = 0;
-  for (const p of PROXIES) {
-    const t0 = Date.now();
-    const r = await tryProxy(p, TARGET);
-    const ms = Date.now()-t0;
-    if (r.ok) {
-      log(`✓ ${p.name}: $${r.price} (${ms}ms)`, 'ok');
-      winners.push(p);
-    } else {
-      log(`✗ ${p.name}: ${r.err} (${ms}ms)`, 'fail');
-    }
+async function runSequential(delayMs, label) {
+  log(`<br>--- ${label} ---`);
+  let ok=0, fail=0;
+  const t0 = Date.now();
+  for (let i=0; i<SYMS.length; i++) {
+    const sym = SYMS[i];
+    if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));
+    const price = await fetchSym(sym);
+    const elapsed = ((Date.now()-t0)/1000).toFixed(1);
+    if (price) { ok++; log(`  ✓ [${String(i+1).padStart(2)}] ${sym} $${price} (${elapsed}s)`, 'ok'); }
+    else        { fail++; log(`  ✗ [${String(i+1).padStart(2)}] ${sym} FAILED (${elapsed}s)`, 'fail'); }
   }
-  log(`<br>Winners: ${winners.map(p=>p.name).join(', ') || 'none'}`, winners.length?'ok':'fail');
+  log(`Result: ${ok}/30 ok in ${((Date.now()-t0)/1000).toFixed(1)}s`, ok===30?'ok':'warn');
 }
 
-async function testWinners() {
-  if (!winners.length) { log('Run "Test all proxies" first', 'warn'); return; }
-  log(`<br>Testing ${winners.length} winner(s) with all 26 ETFs concurrently...<br>`);
-  for (const p of winners) {
-    const t0 = Date.now();
-    const results = await Promise.all(ETFS.map(sym => {
-      const url = 'https://query2.finance.yahoo.com/v8/finance/chart/'+sym+'?range=1d&interval=1d';
-      return tryProxy(p, url);
-    }));
-    const ok = results.filter(r=>r.ok).length;
-    log(`${p.name}: ${ok}/26 ok in ${Date.now()-t0}ms`, ok===26?'ok':'warn');
-    results.forEach((r,i) => { if(!r.ok) log(`  ✗ ${ETFS[i]}: ${r.err}`, 'fail'); });
+async function test1() { await runSequential(0,   '30 sequential, no delay'); }
+async function test2() { await runSequential(1000, '30 sequential, 1s delay between each'); }
+async function test3() { await runSequential(2000, '30 sequential, 2s delay between each'); }
+
+async function test4() {
+  log('<br>--- Waiting 60 seconds for rate limit to reset... ---', 'warn');
+  for (let i=60; i>0; i--) {
+    await new Promise(r => setTimeout(r, 1000));
+    if (i % 10 === 0) log(`  ${i}s remaining...`);
   }
+  log('  Retrying 10 symbols...');
+  let ok=0;
+  for (const sym of SYMS.slice(0,10)) {
+    const price = await fetchSym(sym);
+    if (price) { ok++; log(`  ✓ ${sym} $${price}`, 'ok'); }
+    else        { log(`  ✗ ${sym} failed`, 'fail'); }
+  }
+  log(`After 60s wait: ${ok}/10 ok`, ok===10?'ok':'warn');
 }
 </script>
 </body>
