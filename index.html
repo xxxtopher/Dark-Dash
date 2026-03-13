@@ -565,12 +565,15 @@ function computeMA(closes, period) {
 }
 
 function recomputeBreadth() {
-  let a20=0,a50=0,a200=0,hi=0,lo=0,tot=0;
+  let a20=0,a50=0,a200=0,hi=0,lo=0,tot=0,up=0,down=0;
   for (const sym of ALL_HOLDING_SYMS) {
     const cl = holdingHistory[sym]?.closes ?? [];
     if (cl.length < 20) continue;
     tot++;
-    const p=cl[cl.length-1], h52=Math.max(...cl.slice(-252)), l52=Math.min(...cl.slice(-252));
+    const p   = cl[cl.length-1];
+    const prev = cl[cl.length-2];
+    if (prev != null) { if (p >= prev) up++; else down++; }
+    const h52 = Math.max(...cl.slice(-252)), l52 = Math.min(...cl.slice(-252));
     const ma20=computeMA(cl,20), ma50=computeMA(cl,50), ma200=computeMA(cl,200);
     if (ma20  && p>ma20)  a20++;
     if (ma50  && p>ma50)  a50++;
@@ -579,10 +582,13 @@ function recomputeBreadth() {
     if (p<=l52*1.01) lo++;
   }
   if (tot > 0) {
+    breadthState.up    = up;
+    breadthState.down  = down;
     breadthState.above20  = parseFloat((a20/tot*100).toFixed(1));
     breadthState.above50  = parseFloat((a50/tot*100).toFixed(1));
     breadthState.above200 = parseFloat((a200/tot*100).toFixed(1));
-    breadthState.highs = hi; breadthState.lows = lo;
+    breadthState.highs = hi;
+    breadthState.lows  = lo;
     renderBreadth();
     const ts = document.getElementById('breadthTimestamp');
     if (ts) ts.textContent = tot + '/' + ALL_HOLDING_SYMS.length + ' computed';
@@ -595,16 +601,30 @@ async function loadBreadth(force=false) {
   if (breadthComputing) return;
   breadthComputing = true;
   document.getElementById('breadthBtn').classList.add('computing');
-  Object.assign(breadthState, {above20:null,above50:null,above200:null,highs:null,lows:null,lastComputed:null});
+  Object.assign(breadthState, {up:null,down:null,above20:null,above50:null,above200:null,highs:null,lows:null,lastComputed:null});
   for (const k of Object.keys(holdingHistory)) delete holdingHistory[k];
   renderBreadth();
-  for (const sym of ALL_HOLDING_SYMS) {
-    try {
-      const closes = await fetchQuoteHistory(sym,'1y');
-      holdingHistory[sym] = { closes, loaded:true };
-    } catch { holdingHistory[sym] = { closes:[], loaded:true }; }
-    recomputeBreadth();
+
+  if (WORKER_URL) {
+    // Parallel — worker handles all requests without rate limiting
+    await Promise.all(ALL_HOLDING_SYMS.map(async sym => {
+      try {
+        const closes = await fetchQuoteHistory(sym,'1y');
+        holdingHistory[sym] = { closes, loaded:true };
+      } catch { holdingHistory[sym] = { closes:[], loaded:true }; }
+      recomputeBreadth();
+    }));
+  } else {
+    // Sequential — allorigins rate limit
+    for (const sym of ALL_HOLDING_SYMS) {
+      try {
+        const closes = await fetchQuoteHistory(sym,'1y');
+        holdingHistory[sym] = { closes, loaded:true };
+      } catch { holdingHistory[sym] = { closes:[], loaded:true }; }
+      recomputeBreadth();
+    }
   }
+
   breadthState.lastComputed = Date.now();
   breadthComputing = false;
   document.getElementById('breadthBtn').classList.remove('computing');
