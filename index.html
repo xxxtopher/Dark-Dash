@@ -769,78 +769,105 @@ function newsLog(msg, state='active') {
 // Fetch Yahoo Finance news for a symbol via worker proxy
 async function fetchYahooNews(sym) {
   try {
-    const url = `https://query2.finance.yahoo.com/v2/finance/news?symbols=${sym}&count=5`;
+    // Yahoo Finance v2 news search
+    const url = `https://query2.finance.yahoo.com/v2/finance/news?symbols=${sym}&count=6`;
     const res = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(8000) });
-    const data = await res.json();
-    const items = data?.items?.result ?? data?.data?.stream ?? [];
+    const text = await res.text();
+    const data = JSON.parse(text);
     const cutoff = Date.now() - 24*60*60*1000;
-    return items
-      .filter(i => (i.published_at || i.pubDate || i.time || 0)*1000 > cutoff || (i.content?.pubDate && new Date(i.content.pubDate) > new Date(Date.now()-24*60*60*1000)))
-      .map(i => i.content?.title || i.title || i.summary || '')
+    const items = data?.items?.result ?? data?.data?.stream ?? data?.result ?? [];
+    const headlines = items
+      .filter(i => {
+        const t = (i.content?.pubDate || i.pubDate || i.published_at || 0);
+        const ms = typeof t === 'number' ? t*1000 : new Date(t).getTime();
+        return ms > cutoff;
+      })
+      .map(i => i.content?.title || i.title || i.headline || '')
       .filter(Boolean)
-      .slice(0, 4);
-  } catch { return []; }
+      .slice(0, 5);
+    if (headlines.length) return headlines;
+
+    // Fallback: Yahoo Finance quote summary news
+    const url2 = `https://query2.finance.yahoo.com/v1/finance/search?q=${sym}&newsCount=5&quotesCount=0`;
+    const res2 = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url2)}`, { signal: AbortSignal.timeout(8000) });
+    const data2 = await res2.json();
+    return (data2?.news ?? [])
+      .filter(n => (n.providerPublishTime||0)*1000 > cutoff)
+      .map(n => n.title)
+      .filter(Boolean)
+      .slice(0, 5);
+  } catch(e) {
+    console.warn('[news]', sym, e.message);
+    return [];
+  }
 }
 
 // Fetch SEC EDGAR filings for a symbol (last 24h)
 async function fetchSECFilings(sym) {
   try {
-    // Search EDGAR full-text search for recent filings
-    const url = `https://efts.sec.gov/LATEST/search-index?q=%22${sym}%22&dateRange=custom&startdt=${new Date(Date.now()-86400000).toISOString().slice(0,10)}&enddt=${new Date().toISOString().slice(0,10)}&forms=8-K,4,SC 13G,SC 13D`;
+    const today = new Date().toISOString().slice(0,10);
+    const yesterday = new Date(Date.now()-86400000).toISOString().slice(0,10);
+    // EDGAR full text search
+    const url = `https://efts.sec.gov/LATEST/search-index?q=%22${sym}%22&dateRange=custom&startdt=${yesterday}&enddt=${today}&forms=8-K,4,SC+13G,SC+13D,13F-HR`;
     const res = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(8000) });
     const data = await res.json();
-    return (data?.hits?.hits ?? []).slice(0,3).map(h => {
+    const hits = data?.hits?.hits ?? [];
+    return hits.slice(0,4).map(h => {
       const s = h._source;
-      return `[SEC ${s.form_type}] ${s.display_names?.[0] || sym}: ${s.file_date}`;
+      const filer = Array.isArray(s.display_names) ? s.display_names[0] : sym;
+      return `[${s.form_type}] ${filer} — filed ${s.file_date}`;
     });
-  } catch { return []; }
+  } catch(e) {
+    console.warn('[sec]', sym, e.message);
+    return [];
+  }
 }
 
 // Call Claude API to summarize news + filings for all stocks
 async function summarizeWithClaude(allItems) {
-  // allItems: { sym, news:[], filings:[] }[]
   const hasContent = allItems.filter(s => s.news.length || s.filings.length);
   if (!hasContent.length) return null;
 
-  const prompt = `You are a financial news analyst. Below are the latest news headlines and SEC filings from the last 24 hours for a watchlist of stocks. 
+  const prompt = `You are a financial news analyst. Below are the latest news headlines and SEC filings from the last 24 hours for a watchlist of stocks.
 
-For each stock that has news or filings, provide:
-- 2-4 concise bullet points summarizing the key developments
-- Flag SEC filings (8-K, Form 4, 13G/13D) as notable events
-- Be factual and brief — no opinions or recommendations
+For each stock that has news or filings, provide 2-4 concise bullet points summarizing the key developments. Flag SEC filings as notable events. Be factual and brief.
 
-${hasContent.map(s => `
-## ${s.sym}
-${s.news.length ? 'News:\n' + s.news.map(n=>`- ${n}`).join('\n') : ''}
-${s.filings.length ? 'SEC Filings:\n' + s.filings.map(f=>`- ${f}`).join('\n') : ''}
-`).join('\n')}
+${hasContent.map(s => `## ${s.sym}
+${s.news.length ? 'News:\n'+s.news.map(n=>`- ${n}`).join('\n') : ''}
+${s.filings.length ? 'SEC Filings:\n'+s.filings.map(f=>`- ${f}`).join('\n') : ''}`).join('\n\n')}
 
-Respond in JSON only. Format:
-{
-  "stocks": [
-    {
-      "sym": "TICKER",
-      "points": ["bullet point 1", "bullet point 2"],
-      "hasFiling": true/false
-    }
-  ]
-}`;
+Respond ONLY in JSON (no markdown fences):
+{"stocks":[{"sym":"TICKER","points":["bullet 1","bullet 2"],"hasFiling":false}]}`;
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1000,
-      messages: [{ role: 'user', content: prompt }]
-    })
-  });
-  const data = await res.json();
-  const text = data.content?.[0]?.text ?? '';
   try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 2000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    const data = await res.json();
+    const text = data.content?.[0]?.text ?? '';
     const clean = text.replace(/```json|```/g,'').trim();
     return JSON.parse(clean);
-  } catch { return null; }
+  } catch(e) {
+    console.warn('[claude]', e.message);
+    // Fallback: return raw items as bullet points without AI summary
+    return {
+      stocks: hasContent.map(s => ({
+        sym: s.sym,
+        points: [...s.filings, ...s.news].slice(0,4),
+        hasFiling: s.filings.length > 0
+      }))
+    };
+  }
 }
 
 function renderNewsSummary(summaries, rawItems) {
@@ -900,6 +927,19 @@ async function loadNews(force=false) {
     news: newsResults[i],
     filings: filingResults[i]
   })).filter(s => s.news.length || s.filings.length);
+
+  const newsCount  = newsResults.reduce((a,n)=>a+n.length,0);
+  const filingCount = filingResults.reduce((a,f)=>a+f.length,0);
+  newsLog(`Found ${newsCount} headlines, ${filingCount} filings across ${rawItems.length} stocks.`, 'done');
+
+  if (!rawItems.length) {
+    document.getElementById('newsBody').innerHTML =
+      '<div class="news-placeholder">No news or SEC filings found in the last 24h for watchlist stocks. Markets may be closed or sources temporarily unavailable.</div>';
+    newsComputing = false;
+    document.getElementById('newsBtn').classList.remove('computing');
+    document.getElementById('newsTimestamp').textContent = 'No activity found · ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    return;
+  }
 
   newsLog(`Found news/filings for ${rawItems.length} stocks. Generating AI summary...`);
 
