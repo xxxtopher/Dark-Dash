@@ -47,7 +47,34 @@
   .btn.loading .btn-icon { animation:spin 1s linear infinite; display:inline-block; }
   .btn-icon { font-size:13px; }
   @keyframes spin { to{transform:rotate(360deg)} }
-  .btn-breadth:hover { border-color:var(--gold); color:var(--gold); }
+  .btn-news:hover { border-color:#a78bfa; color:#a78bfa; }
+  .btn-news.active { border-color:#a78bfa; color:#a78bfa; background:rgba(167,139,250,0.07); }
+  .btn-news.computing { opacity:0.6; pointer-events:none; }
+
+  /* News Panel */
+  .news-panel { display:none; border-bottom:1px solid var(--border); background:var(--bg2); }
+  .news-panel.visible { display:block; }
+  .news-header { display:flex; align-items:center; justify-content:space-between; padding:8px 28px; border-bottom:1px solid var(--border); }
+  .news-label { font-size:10px; color:#a78bfa; letter-spacing:1.5px; text-transform:uppercase; }
+  .news-ts { font-size:9px; color:var(--text3); letter-spacing:0.5px; }
+  .news-body { padding:14px 28px; max-height:520px; overflow-y:auto; }
+  .news-placeholder { font-size:11px; color:var(--text3); font-style:italic; }
+  .news-loading { display:flex; flex-direction:column; gap:6px; }
+  .news-loading-step { font-size:10px; color:var(--text2); letter-spacing:0.5px; }
+  .news-loading-step.done { color:var(--green); }
+  .news-loading-step.active { color:var(--accent); }
+  .news-summary { display:grid; grid-template-columns:repeat(auto-fill, minmax(340px,1fr)); gap:14px; }
+  .news-stock-card { background:var(--bg3); border:1px solid var(--border); border-radius:6px; padding:12px 14px; }
+  .news-stock-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .news-stock-sym { font-size:13px; font-weight:700; color:var(--accent); letter-spacing:0.5px; }
+  .news-stock-count { font-size:9px; color:var(--text3); letter-spacing:0.5px; }
+  .news-points { list-style:none; display:flex; flex-direction:column; gap:5px; }
+  .news-point { font-size:10.5px; color:var(--text); line-height:1.5; padding-left:12px; position:relative; }
+  .news-point::before { content:'▸'; position:absolute; left:0; color:var(--accent); font-size:8px; top:2px; }
+  .news-point.filing { }
+  .news-point.filing::before { color:#ffd700; content:'⚡'; }
+  .news-source { font-size:9px; color:var(--text3); margin-top:8px; border-top:1px solid var(--border); padding-top:5px; }
+  .news-no-news { font-size:10px; color:var(--text3); font-style:italic; }
   .btn-breadth.active { border-color:var(--gold); color:var(--gold); background:rgba(255,215,0,0.05); }
   .btn-breadth.computing { opacity:0.6; pointer-events:none; }
 
@@ -181,6 +208,7 @@
 <div class="toolbar">
   <span class="toolbar-label">▸ 26 Thematic ETFs · 1D Performance</span>
   <div class="btn-row">
+    <button class="btn btn-news" id="newsBtn"><span class="btn-icon">📰</span> News & Filings</button>
     <button class="btn btn-breadth" id="breadthBtn"><span class="btn-icon">⬡</span> Market Breadth</button>
     <button class="btn" id="refreshBtn"><span class="btn-icon btn-spin">↻</span> Refresh</button>
   </div>
@@ -234,7 +262,18 @@
   </div>
 </div>
 
-<div class="content-wrap">
+<!-- News Panel (hidden by default) -->
+<div class="news-panel" id="newsPanel">
+  <div class="news-header">
+    <span class="news-label">📰 Watchlist News & Filings · Last 24h</span>
+    <span class="news-ts" id="newsTimestamp"></span>
+  </div>
+  <div class="news-body" id="newsBody">
+    <div class="news-placeholder">Click "News &amp; Filings" to fetch latest news and SEC filings for all watchlist stocks and generate an AI summary.</div>
+  </div>
+</div>
+
+
 
   <!-- Watchlist sidebar -->
   <div class="watchlist-panel">
@@ -708,7 +747,181 @@ async function loadWatchlist() {
   }
 }
 
-// ─── CONTROLS ─────────────────────────────────────────────────────────────────
+// ─── NEWS & FILINGS ───────────────────────────────────────────────────────────
+let newsVisible = false;
+let newsComputing = false;
+let newsLastComputed = null;
+const NEWS_CACHE_MS = 30 * 60 * 1000; // 30 min cache
+
+function newsLog(msg, state='active') {
+  const el = document.getElementById('newsBody');
+  const existing = el.querySelector('.news-loading');
+  const wrap = existing || (() => { const d=document.createElement('div'); d.className='news-loading'; el.innerHTML=''; el.appendChild(d); return d; })();
+  const step = document.createElement('div');
+  step.className = 'news-loading-step ' + state;
+  step.textContent = msg;
+  wrap.appendChild(step);
+  // mark previous as done
+  const steps = wrap.querySelectorAll('.news-loading-step.active');
+  steps.forEach((s,i) => { if(i < steps.length-1) { s.classList.remove('active'); s.classList.add('done'); } });
+}
+
+// Fetch Yahoo Finance news for a symbol via worker proxy
+async function fetchYahooNews(sym) {
+  try {
+    const url = `https://query2.finance.yahoo.com/v2/finance/news?symbols=${sym}&count=5`;
+    const res = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(8000) });
+    const data = await res.json();
+    const items = data?.items?.result ?? data?.data?.stream ?? [];
+    const cutoff = Date.now() - 24*60*60*1000;
+    return items
+      .filter(i => (i.published_at || i.pubDate || i.time || 0)*1000 > cutoff || (i.content?.pubDate && new Date(i.content.pubDate) > new Date(Date.now()-24*60*60*1000)))
+      .map(i => i.content?.title || i.title || i.summary || '')
+      .filter(Boolean)
+      .slice(0, 4);
+  } catch { return []; }
+}
+
+// Fetch SEC EDGAR filings for a symbol (last 24h)
+async function fetchSECFilings(sym) {
+  try {
+    // Search EDGAR full-text search for recent filings
+    const url = `https://efts.sec.gov/LATEST/search-index?q=%22${sym}%22&dateRange=custom&startdt=${new Date(Date.now()-86400000).toISOString().slice(0,10)}&enddt=${new Date().toISOString().slice(0,10)}&forms=8-K,4,SC 13G,SC 13D`;
+    const res = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(8000) });
+    const data = await res.json();
+    return (data?.hits?.hits ?? []).slice(0,3).map(h => {
+      const s = h._source;
+      return `[SEC ${s.form_type}] ${s.display_names?.[0] || sym}: ${s.file_date}`;
+    });
+  } catch { return []; }
+}
+
+// Call Claude API to summarize news + filings for all stocks
+async function summarizeWithClaude(allItems) {
+  // allItems: { sym, news:[], filings:[] }[]
+  const hasContent = allItems.filter(s => s.news.length || s.filings.length);
+  if (!hasContent.length) return null;
+
+  const prompt = `You are a financial news analyst. Below are the latest news headlines and SEC filings from the last 24 hours for a watchlist of stocks. 
+
+For each stock that has news or filings, provide:
+- 2-4 concise bullet points summarizing the key developments
+- Flag SEC filings (8-K, Form 4, 13G/13D) as notable events
+- Be factual and brief — no opinions or recommendations
+
+${hasContent.map(s => `
+## ${s.sym}
+${s.news.length ? 'News:\n' + s.news.map(n=>`- ${n}`).join('\n') : ''}
+${s.filings.length ? 'SEC Filings:\n' + s.filings.map(f=>`- ${f}`).join('\n') : ''}
+`).join('\n')}
+
+Respond in JSON only. Format:
+{
+  "stocks": [
+    {
+      "sym": "TICKER",
+      "points": ["bullet point 1", "bullet point 2"],
+      "hasFiling": true/false
+    }
+  ]
+}`;
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1000,
+      messages: [{ role: 'user', content: prompt }]
+    })
+  });
+  const data = await res.json();
+  const text = data.content?.[0]?.text ?? '';
+  try {
+    const clean = text.replace(/```json|```/g,'').trim();
+    return JSON.parse(clean);
+  } catch { return null; }
+}
+
+function renderNewsSummary(summaries, rawItems) {
+  const el = document.getElementById('newsBody');
+  if (!summaries?.stocks?.length) {
+    el.innerHTML = '<div class="news-placeholder">No significant news or filings found in the last 24 hours for watchlist stocks.</div>';
+    return;
+  }
+  // Build a map for stocks with no AI summary but raw items
+  const summarized = new Set(summaries.stocks.map(s=>s.sym));
+  let html = '<div class="news-summary">';
+  for (const s of summaries.stocks) {
+    const raw = rawItems.find(r=>r.sym===s.sym);
+    const count = (raw?.news?.length||0) + (raw?.filings?.length||0);
+    html += `<div class="news-stock-card">
+      <div class="news-stock-header">
+        <span class="news-stock-sym">${s.sym}</span>
+        <span class="news-stock-count">${count} item${count!==1?'s':''}</span>
+      </div>
+      <ul class="news-points">
+        ${s.points.map(p => `<li class="news-point${s.hasFiling?' filing':''}">${p}</li>`).join('')}
+      </ul>
+    </div>`;
+  }
+  // Stocks with raw items but not summarized
+  for (const r of rawItems) {
+    if (!summarized.has(r.sym) && (r.news.length||r.filings.length)) {
+      html += `<div class="news-stock-card">
+        <div class="news-stock-header"><span class="news-stock-sym">${r.sym}</span><span class="news-stock-count">${r.news.length+r.filings.length} items</span></div>
+        <ul class="news-points">${[...r.filings,...r.news].map(p=>`<li class="news-point">${p}</li>`).join('')}</ul>
+      </div>`;
+    }
+  }
+  html += '</div>';
+  html += `<div class="news-source">Sources: Yahoo Finance · SEC EDGAR · Summarized by Claude AI · ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>`;
+  el.innerHTML = html;
+}
+
+async function loadNews(force=false) {
+  if (!force && newsLastComputed && Date.now()-newsLastComputed < NEWS_CACHE_MS) return;
+  if (newsComputing) return;
+  newsComputing = true;
+  document.getElementById('newsBtn').classList.add('computing');
+
+  const allSyms = [...new Set(WATCHLIST.flatMap(g=>g.tickers))];
+  newsLog(`Scanning ${allSyms.length} watchlist stocks...`);
+
+  // Fetch news + filings in parallel for all symbols
+  newsLog(`Fetching Yahoo Finance news...`);
+  const newsResults = await Promise.all(allSyms.map(sym => fetchYahooNews(sym)));
+
+  newsLog(`Checking SEC EDGAR filings...`);
+  const filingResults = await Promise.all(allSyms.map(sym => fetchSECFilings(sym)));
+
+  const rawItems = allSyms.map((sym,i) => ({
+    sym,
+    news: newsResults[i],
+    filings: filingResults[i]
+  })).filter(s => s.news.length || s.filings.length);
+
+  newsLog(`Found news/filings for ${rawItems.length} stocks. Generating AI summary...`);
+
+  const summary = await summarizeWithClaude(rawItems);
+
+  renderNewsSummary(summary, rawItems);
+  newsLastComputed = Date.now();
+  document.getElementById('newsTimestamp').textContent =
+    `${rawItems.length} stocks with activity · computed ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`;
+
+  newsComputing = false;
+  document.getElementById('newsBtn').classList.remove('computing');
+}
+
+document.getElementById('newsBtn').addEventListener('click', () => {
+  newsVisible = !newsVisible;
+  document.getElementById('newsPanel').classList.toggle('visible', newsVisible);
+  document.getElementById('newsBtn').classList.toggle('active', newsVisible);
+  if (newsVisible) loadNews();
+});
+
+
 document.getElementById('refreshBtn').addEventListener('click', () => {
   for (const k of Object.keys(etfPerf)) delete etfPerf[k];
   loadMarketOverview();
