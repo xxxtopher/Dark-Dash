@@ -400,8 +400,8 @@ function renderThemeRanking() {
     .filter(t => t.pct != null)
     .sort((a, b) => b.pct - a.pct);
   if (!ranked.length) return;
-  const top = ranked.slice(0, 3);
-  const bot = ranked.slice(-3).reverse();
+  const top = ranked.slice(0, 5);
+  const bot = ranked.slice(-5).reverse();
   const row = t => '<div class="ranking-row"><span class="ranking-name">' + t.name + '</span><span class="ranking-pct ' + (t.pct >= 0 ? 'pos' : 'neg') + '">' + (t.pct >= 0 ? '+' : '') + t.pct.toFixed(2) + '%</span></div>';
   document.getElementById('themeRankingTable').innerHTML =
     '<div class="ranking-section-label top">\u25b2 Leaders</div>' + top.map(row).join('') +
