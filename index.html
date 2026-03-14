@@ -152,7 +152,7 @@
   .w-val.loading { color:var(--text3); font-size:8.5px; font-weight:400; animation:shimmer 1.5s infinite; }
 
   /* Bar chart main area */
-  .main-content { flex:1; min-width:0; padding-bottom:40px; }
+  .main-content { flex:1; min-width:0; padding-bottom:40px; padding-left:16px; }
 
   .bar-section { padding:10px 22px 6px; border-bottom:1px solid var(--border); background:var(--bg); }
   .bar-section-title { font-size:8px; letter-spacing:2px; text-transform:uppercase; margin-bottom:5px; font-weight:600; }
@@ -769,30 +769,13 @@ function newsLog(msg, state='active') {
 // Fetch Yahoo Finance news for a symbol via worker proxy
 async function fetchYahooNews(sym) {
   try {
-    // Yahoo Finance v2 news search
-    const url = `https://query2.finance.yahoo.com/v2/finance/news?symbols=${sym}&count=6`;
+    // Yahoo Finance search endpoint — returns news in .news[]
+    const url = `https://query2.finance.yahoo.com/v1/finance/search?q=${sym}&newsCount=8&quotesCount=0&enableFuzzyQuery=false`;
     const res = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(8000) });
-    const text = await res.text();
-    const data = JSON.parse(text);
+    const data = await res.json();
     const cutoff = Date.now() - 24*60*60*1000;
-    const items = data?.items?.result ?? data?.data?.stream ?? data?.result ?? [];
-    const headlines = items
-      .filter(i => {
-        const t = (i.content?.pubDate || i.pubDate || i.published_at || 0);
-        const ms = typeof t === 'number' ? t*1000 : new Date(t).getTime();
-        return ms > cutoff;
-      })
-      .map(i => i.content?.title || i.title || i.headline || '')
-      .filter(Boolean)
-      .slice(0, 5);
-    if (headlines.length) return headlines;
-
-    // Fallback: Yahoo Finance quote summary news
-    const url2 = `https://query2.finance.yahoo.com/v1/finance/search?q=${sym}&newsCount=5&quotesCount=0`;
-    const res2 = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url2)}`, { signal: AbortSignal.timeout(8000) });
-    const data2 = await res2.json();
-    return (data2?.news ?? [])
-      .filter(n => (n.providerPublishTime||0)*1000 > cutoff)
+    return (data?.news ?? [])
+      .filter(n => (n.providerPublishTime ?? 0) * 1000 > cutoff)
       .map(n => n.title)
       .filter(Boolean)
       .slice(0, 5);
@@ -802,20 +785,18 @@ async function fetchYahooNews(sym) {
   }
 }
 
-// Fetch SEC EDGAR filings for a symbol (last 24h)
+// Fetch SEC EDGAR filings for a symbol (last 2 days to catch weekend filings)
 async function fetchSECFilings(sym) {
   try {
-    const today = new Date().toISOString().slice(0,10);
-    const yesterday = new Date(Date.now()-86400000).toISOString().slice(0,10);
-    // EDGAR full text search
-    const url = `https://efts.sec.gov/LATEST/search-index?q=%22${sym}%22&dateRange=custom&startdt=${yesterday}&enddt=${today}&forms=8-K,4,SC+13G,SC+13D,13F-HR`;
+    const today     = new Date().toISOString().slice(0,10);
+    const twoDaysAgo = new Date(Date.now()-2*86400000).toISOString().slice(0,10);
+    const url = `https://efts.sec.gov/LATEST/search-index?q=%22${encodeURIComponent(sym)}%22&dateRange=custom&startdt=${twoDaysAgo}&enddt=${today}&forms=8-K,4,SC+13G,SC+13D`;
     const res = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(8000) });
     const data = await res.json();
-    const hits = data?.hits?.hits ?? [];
-    return hits.slice(0,4).map(h => {
+    return (data?.hits?.hits ?? []).slice(0, 4).map(h => {
       const s = h._source;
       const filer = Array.isArray(s.display_names) ? s.display_names[0] : sym;
-      return `[${s.form_type}] ${filer} — filed ${s.file_date}`;
+      return `[${s.form_type}] ${filer} — ${s.file_date}`;
     });
   } catch(e) {
     console.warn('[sec]', sym, e.message);
