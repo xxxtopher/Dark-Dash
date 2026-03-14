@@ -152,15 +152,15 @@
   .w-val.loading { color:var(--text3); font-size:8.5px; font-weight:400; animation:shimmer 1.5s infinite; }
 
   /* Bar chart main area */
-  .main-content { flex:1; min-width:0; padding-bottom:40px; padding-left:16px; }
+  .main-content { flex:1; min-width:0; padding-bottom:40px; }
 
-  .bar-section { padding:10px 22px 6px; border-bottom:1px solid var(--border); background:var(--bg); }
+  .bar-section { padding:10px 28px 6px 28px; border-bottom:1px solid var(--border); background:var(--bg); }
   .bar-section-title { font-size:8px; letter-spacing:2px; text-transform:uppercase; margin-bottom:5px; font-weight:600; }
 
   .bar-row { display:flex; align-items:center; padding:3px 0; cursor:pointer; border-radius:3px; transition:background 0.12s; text-decoration:none; }
   .bar-row:hover { background:rgba(255,255,255,0.03); }
 
-  .bar-label { width:150px; flex-shrink:0; padding-right:10px; }
+  .bar-label { width:160px; flex-shrink:0; padding-right:10px; }
   .bar-name { font-family:'Bebas Neue',sans-serif; font-size:14px; letter-spacing:1.5px; line-height:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .bar-etf { font-size:7.5px; color:var(--text3); letter-spacing:0.8px; margin-top:1px; }
 
@@ -794,9 +794,15 @@ async function fetchSECFilings(sym) {
     const res = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(8000) });
     const data = await res.json();
     return (data?.hits?.hits ?? []).slice(0, 4).map(h => {
-      const s = h._source;
-      const filer = Array.isArray(s.display_names) ? s.display_names[0] : sym;
-      return `[${s.form_type}] ${filer} — ${s.file_date}`;
+      const src = h._source ?? h;
+      // EDGAR field names vary — try multiple keys
+      const form   = src.form_type   ?? src.file_type ?? src.type ?? 'Filing';
+      const filer  = Array.isArray(src.display_names) ? src.display_names[0]
+                   : (src.entity_name ?? src.company_name ?? sym);
+      const filed  = src.file_date   ?? src.period_of_report ?? '';
+      // strip CIK noise from display_names like "Ondas Inc. (ONDS) (CIK 0001646188)"
+      const cleanFiler = filer.replace(/\s*\(CIK\s+\d+\)/gi, '').trim();
+      return `[SEC ${form}] ${cleanFiler} filed on ${filed}`;
     });
   } catch(e) {
     console.warn('[sec]', sym, e.message);
@@ -817,8 +823,14 @@ ${hasContent.map(s => `## ${s.sym}
 ${s.news.length ? 'News:\n'+s.news.map(n=>`- ${n}`).join('\n') : ''}
 ${s.filings.length ? 'SEC Filings:\n'+s.filings.map(f=>`- ${f}`).join('\n') : ''}`).join('\n\n')}
 
+IMPORTANT: Write each bullet point as a proper informative sentence, NOT as raw data.
+Bad: "[SEC 8-K] Ondas Inc. filed on 2026-03-12"
+Good: "Ondas filed an 8-K on Mar 12, likely disclosing a material event — review for details."
+Bad: "Analyst upgrades KTOS"
+Good: "Kratos Defense received an analyst upgrade, signaling improving sentiment on defense spending."
+
 Respond ONLY in JSON (no markdown fences):
-{"stocks":[{"sym":"TICKER","points":["bullet 1","bullet 2"],"hasFiling":false}]}`;
+{"stocks":[{"sym":"TICKER","points":["sentence 1","sentence 2"],"hasFiling":false}]}`;
 
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -841,10 +853,14 @@ Respond ONLY in JSON (no markdown fences):
   } catch(e) {
     console.warn('[claude]', e.message);
     // Fallback: return raw items as bullet points without AI summary
+    // Fallback: show news headlines as-is; convert filings to readable sentences
     return {
       stocks: hasContent.map(s => ({
         sym: s.sym,
-        points: [...s.filings, ...s.news].slice(0,4),
+        points: [
+          ...s.filings.map(f => f.replace(/^\[SEC ([^\]]+)\] (.+?) filed on (.+)$/, 'SEC $1 filing by $2 on $3.')),
+          ...s.news
+        ].filter(Boolean).slice(0, 4),
         hasFiling: s.filings.length > 0
       }))
     };
