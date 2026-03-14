@@ -52,7 +52,7 @@
   .btn-breadth.computing { opacity:0.6; pointer-events:none; }
 
   /* Market overview */
-  .market-overview { background:var(--bg2); border-bottom:1px solid var(--border); padding:8px 28px; display:grid; grid-template-columns:1fr 1fr 190px; gap:10px; align-items:stretch; }
+  .market-overview { background:var(--bg2); border-bottom:1px solid var(--border); padding:8px 28px; display:grid; grid-template-columns:1fr 1fr 260px; gap:10px; align-items:stretch; }
   .market-chart-card { background:var(--bg3); border:1px solid var(--border); border-radius:6px; padding:4px 8px; display:flex; flex-direction:column; min-height:80px; }
   .market-chart-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:2px; }
   .market-chart-title { font-size:6.5px; color:var(--text3); letter-spacing:0.8px; text-transform:uppercase; }
@@ -66,13 +66,13 @@
 
   /* Theme ranking sidebar panel */
   .theme-ranking { background:var(--bg3); border:1px solid var(--border); border-radius:6px; padding:8px 10px; display:flex; flex-direction:column; min-width:0; }
-  .ranking-title { font-size:9px; color:var(--text3); letter-spacing:1.5px; text-transform:uppercase; margin-bottom:6px; }
-  .ranking-section-label { font-size:10px; letter-spacing:1px; text-transform:uppercase; margin:3px 0 2px; padding-bottom:2px; border-bottom:1px solid var(--border); }
+  .ranking-title { font-size:10px; color:var(--text3); letter-spacing:1.5px; text-transform:uppercase; margin-bottom:6px; }
+  .ranking-section-label { font-size:11px; letter-spacing:1px; text-transform:uppercase; margin:3px 0 2px; padding-bottom:2px; border-bottom:1px solid var(--border); }
   .ranking-section-label.top { color:var(--green); }
   .ranking-section-label.bot { color:var(--red); }
   .ranking-row { display:flex; justify-content:space-between; align-items:center; padding:2px 0; }
-  .ranking-name { font-size:11px; color:var(--text); letter-spacing:0.3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:115px; }
-  .ranking-pct { font-size:12px; font-weight:600; letter-spacing:-0.3px; flex-shrink:0; }
+  .ranking-name { font-size:12px; color:var(--text); letter-spacing:0.3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:160px; }
+  .ranking-pct { font-size:13px; font-weight:600; letter-spacing:-0.3px; flex-shrink:0; }
   .ranking-pct.pos { color:var(--green); }
   .ranking-pct.neg { color:var(--red); }
   .ranking-pct.loading { color:var(--text3); font-size:9px; animation:shimmer 1.5s infinite; }
@@ -107,18 +107,18 @@
   .content-wrap { display:flex; align-items:flex-start; }
 
   /* Watchlist */
-  .watchlist-panel { width:185px; flex-shrink:0; border-right:1px solid var(--border); position:sticky; top:48px; max-height:calc(100vh - 48px); overflow-y:auto; background:var(--bg2); }
+  .watchlist-panel { width:240px; flex-shrink:0; border-right:1px solid var(--border); position:sticky; top:48px; max-height:calc(100vh - 48px); overflow-y:auto; background:var(--bg2); }
   .watchlist-header { padding:8px 12px 4px; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--bg2); z-index:10; }
-  .watchlist-title { font-size:8.5px; color:var(--text3); letter-spacing:1.5px; text-transform:uppercase; margin-bottom:4px; }
+  .watchlist-title { font-size:9.5px; color:var(--text3); letter-spacing:1.5px; text-transform:uppercase; margin-bottom:4px; }
   .watchlist-cols { display:grid; grid-template-columns:44px 1fr 1fr 1fr; }
-  .wcol-label { font-size:7px; color:var(--text3); letter-spacing:0.8px; text-transform:uppercase; text-align:right; }
+  .wcol-label { font-size:8px; color:var(--text3); letter-spacing:0.8px; text-transform:uppercase; text-align:right; }
   .wcol-label:first-child { text-align:left; }
-  .watchlist-group-label { font-size:7.5px; color:var(--text3); letter-spacing:1.5px; text-transform:uppercase; padding:6px 12px 2px; background:var(--bg2); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:5px; }
+  .watchlist-group-label { font-size:8.5px; color:var(--text3); letter-spacing:1.5px; text-transform:uppercase; padding:6px 12px 2px; background:var(--bg2); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:5px; }
   .watchlist-group-label::after { content:''; flex:1; height:1px; background:var(--border); }
-  .watchlist-row { display:grid; grid-template-columns:44px 1fr 1fr 1fr; gap:2px; padding:3px 12px; border-bottom:1px solid rgba(255,255,255,0.03); cursor:pointer; transition:background 0.12s; align-items:center; }
+  .watchlist-row { display:grid; grid-template-columns:48px 1fr 1fr 1fr; gap:2px; padding:4px 12px; border-bottom:1px solid rgba(255,255,255,0.03); cursor:pointer; transition:background 0.12s; align-items:center; }
   .watchlist-row:hover { background:var(--bg3); }
-  .w-ticker { font-size:10.5px; font-weight:600; color:var(--text); }
-  .w-val { font-size:10px; font-weight:600; text-align:right; }
+  .w-ticker { font-size:11.5px; font-weight:600; color:var(--text); }
+  .w-val { font-size:11px; font-weight:600; text-align:right; }
   .w-val.pos { color:var(--green); }
   .w-val.neg { color:var(--red); }
   .w-val.flat { color:var(--text3); }
