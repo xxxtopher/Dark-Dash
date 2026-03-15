@@ -83,7 +83,17 @@
   .btn-breadth.active { border-color:var(--gold); color:var(--gold); background:rgba(255,215,0,0.05); }
   .btn-breadth.computing { opacity:0.6; pointer-events:none; }
 
-  /* Market overview */
+  /* Sentiment Bar */
+  .sentiment-bar { background:var(--bg); border-bottom:1px solid var(--border); padding:6px 28px; display:flex; gap:6px; align-items:stretch; overflow-x:auto; }
+  .sent-cell { background:var(--bg2); border:1px solid var(--border); border-radius:5px; padding:5px 10px; display:flex; flex-direction:column; justify-content:center; min-width:90px; flex:1; cursor:default; transition:border-color 0.15s; }
+  .sent-cell:hover { border-color:var(--border2); }
+  .sent-label { font-size:7.5px; color:var(--text3); letter-spacing:1px; text-transform:uppercase; margin-bottom:3px; white-space:nowrap; }
+  .sent-price { font-size:13px; font-weight:700; color:var(--text); letter-spacing:-0.3px; white-space:nowrap; }
+  .sent-pct { font-size:10px; font-weight:600; margin-top:1px; white-space:nowrap; }
+  .sent-pct.pos { color:var(--green); }
+  .sent-pct.neg { color:var(--red); }
+  .sent-pct.flat { color:var(--text3); }
+  .sent-pct.loading { color:var(--text3); animation:shimmer 1.5s infinite; }
   .market-overview { background:var(--bg2); border-bottom:1px solid var(--border); padding:8px 28px; display:grid; grid-template-columns:1fr 1fr 260px; gap:10px; align-items:stretch; }
   .market-chart-card { background:var(--bg3); border:1px solid var(--border); border-radius:6px; padding:4px 8px; display:flex; flex-direction:column; min-height:80px; }
   .market-chart-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:2px; }
@@ -253,6 +263,17 @@
       <div class="ranking-row"><span class="ranking-name">—</span><span class="ranking-pct loading">···</span></div>
     </div>
   </div>
+</div>
+
+<!-- Sentiment Bar -->
+<div class="sentiment-bar" id="sentimentBar">
+  <div class="sent-cell" id="sent-gold">   <div class="sent-label">Gold</div>      <div class="sent-price loading" id="sent-gold-p">···</div>   <div class="sent-pct loading" id="sent-gold-c">···</div></div>
+  <div class="sent-cell" id="sent-silver"> <div class="sent-label">Silver</div>     <div class="sent-price loading" id="sent-silver-p">···</div> <div class="sent-pct loading" id="sent-silver-c">···</div></div>
+  <div class="sent-cell" id="sent-oil">   <div class="sent-label">Crude Oil</div>  <div class="sent-price loading" id="sent-oil-p">···</div>    <div class="sent-pct loading" id="sent-oil-c">···</div></div>
+  <div class="sent-cell" id="sent-tnx">   <div class="sent-label">10Y Yield</div>  <div class="sent-price loading" id="sent-tnx-p">···</div>    <div class="sent-pct loading" id="sent-tnx-c">···</div></div>
+  <div class="sent-cell" id="sent-btc">   <div class="sent-label">Bitcoin</div>    <div class="sent-price loading" id="sent-btc-p">···</div>    <div class="sent-pct loading" id="sent-btc-c">···</div></div>
+  <div class="sent-cell" id="sent-eth">   <div class="sent-label">Ethereum</div>   <div class="sent-price loading" id="sent-eth-p">···</div>    <div class="sent-pct loading" id="sent-eth-c">···</div></div>
+  <div class="sent-cell" id="sent-dxy">   <div class="sent-label">USD Index</div>  <div class="sent-price loading" id="sent-dxy-p">···</div>    <div class="sent-pct loading" id="sent-dxy-c">···</div></div>
 </div>
 
 <!-- Breadth Panel (hidden by default) -->
@@ -976,9 +997,48 @@ document.getElementById('newsBtn').addEventListener('click', () => {
 });
 
 
+// ─── SENTIMENT BAR ────────────────────────────────────────────────────────────
+const SENTIMENT_TICKERS = [
+  { id:'gold',   sym:'GC=F',    fmt: p => '$'+p.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) },
+  { id:'silver', sym:'SI=F',    fmt: p => '$'+p.toFixed(3) },
+  { id:'oil',    sym:'CL=F',    fmt: p => '$'+p.toFixed(2) },
+  { id:'tnx',    sym:'%5ETNX',  fmt: p => p.toFixed(3)+'%' },
+  { id:'btc',    sym:'BTC-USD', fmt: p => '$'+p.toLocaleString('en-US',{maximumFractionDigits:0}) },
+  { id:'eth',    sym:'ETH-USD', fmt: p => '$'+p.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) },
+  { id:'dxy',    sym:'DX-Y.NYB',fmt: p => p.toFixed(3) },
+];
+
+function updateSentCell(id, price, pct) {
+  const pe = document.getElementById('sent-'+id+'-p');
+  const ce = document.getElementById('sent-'+id+'-c');
+  if (!pe || !ce) return;
+  const tk = SENTIMENT_TICKERS.find(t => t.id === id);
+  if (price != null) { pe.textContent = tk.fmt(price); pe.className = 'sent-price'; }
+  if (pct != null) {
+    const up = pct >= 0;
+    ce.textContent = (up?'+':'')+pct.toFixed(2)+'%';
+    ce.className = 'sent-pct '+(Math.abs(pct)<0.05?'flat':up?'pos':'neg');
+  }
+}
+
+async function loadSentiment() {
+  await Promise.all(SENTIMENT_TICKERS.map(async tk => {
+    try {
+      const data = await fetchOne(`${YF_BASE}/v8/finance/chart/${tk.sym}?range=1d&interval=1d`);
+      const meta = data?.chart?.result?.[0]?.meta;
+      if (!meta) return;
+      const price = meta.regularMarketPrice ?? null;
+      const prev  = meta.chartPreviousClose ?? meta.previousClose ?? null;
+      const pct   = (price && prev && prev !== 0) ? ((price-prev)/prev)*100 : null;
+      updateSentCell(tk.id, price, pct);
+    } catch(e) { console.warn('[sent]', tk.sym, e.message); }
+  }));
+}
+
 document.getElementById('refreshBtn').addEventListener('click', () => {
   for (const k of Object.keys(etfPerf)) delete etfPerf[k];
   loadMarketOverview();
+  loadSentiment();
   loadAll();
   loadWatchlist();
   if (breadthVisible) loadBreadth(true);
@@ -988,6 +1048,7 @@ document.getElementById('refreshBtn').addEventListener('click', () => {
 renderBarChart();
 renderWatchlist();
 loadMarketOverview();
+loadSentiment();
 loadAll();
 loadWatchlist();
 
