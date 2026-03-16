@@ -80,6 +80,8 @@
   .news-link:hover { color:var(--accent); text-decoration:underline; }
   .filing-link { color:var(--gold); }
   .filing-link:hover { color:#ffe566; }
+  .news-bullet-link { color:inherit; text-decoration:none; }
+  .news-bullet-link:hover { text-decoration:underline; opacity:0.85; }
   .btn-breadth.active { border-color:var(--gold); color:var(--gold); background:rgba(255,215,0,0.05); }
   .btn-breadth.computing { opacity:0.6; pointer-events:none; }
 
@@ -910,32 +912,73 @@ function renderNewsSummary(summaries, rawItems) {
     el.innerHTML = '<div class="news-placeholder">No significant news or filings found in the last 24 hours for watchlist stocks.</div>';
     return;
   }
-  // Build a map for stocks with no AI summary but raw items
-  const summarized = new Set(summaries.stocks.map(s=>s.sym));
+
+  // Build url lookup: sym -> { news: [{title,url}], filings: [{form,filed,url}] }
+  const rawMap = Object.fromEntries(rawItems.map(r => [r.sym, r]));
+  const summarized = new Set(summaries.stocks.map(s => s.sym));
+
   let html = '<div class="news-summary">';
+
   for (const s of summaries.stocks) {
-    const raw = rawItems.find(r=>r.sym===s.sym);
-    const count = (raw?.news?.length||0) + (raw?.filings?.length||0);
+    const raw = rawMap[s.sym] ?? { news:[], filings:[] };
+    const totalItems = raw.news.length + raw.filings.length;
+
+    // Match each AI bullet to a source URL by finding the closest news title
+    const usedNews = new Set();
+    const pointsHtml = s.points.map(point => {
+      // Try to find a matching news item for this bullet
+      const match = raw.news.find((n,i) => !usedNews.has(i) && n.title);
+      const idx = match ? raw.news.indexOf(match) : -1;
+      if (idx >= 0) usedNews.add(idx);
+
+      const url = match?.url ?? null;
+      const isFiling = s.hasFiling && raw.filings.length > 0 && !match;
+      const filingUrl = isFiling ? raw.filings[0]?.url : null;
+      const linkUrl = url ?? filingUrl;
+
+      const inner = linkUrl
+        ? `<a href="${linkUrl}" target="_blank" class="news-bullet-link">${point} ↗</a>`
+        : point;
+      return `<li class="news-point${isFiling?' filing':''}">${inner}</li>`;
+    }).join('');
+
+    // Show raw filing links separately since they're different from news bullets
+    const filingLinksHtml = raw.filings.map(f =>
+      `<a href="${f.url}" target="_blank" class="news-link filing-link">⚡ SEC ${f.form} · ${f.filed}</a>`
+    ).join('');
+
+    // Remaining news links not matched to bullets
+    const extraNewsHtml = raw.news
+      .filter((_,i) => !usedNews.has(i))
+      .map(n => `<a href="${n.url}" target="_blank" class="news-link">↗ ${n.title.length>70?n.title.slice(0,70)+'…':n.title}</a>`)
+      .join('');
+
+    const hasExtra = filingLinksHtml || extraNewsHtml;
+
     html += `<div class="news-stock-card">
       <div class="news-stock-header">
         <span class="news-stock-sym">${s.sym}</span>
-        <span class="news-stock-count">${count} item${count!==1?'s':''}</span>
+        <span class="news-stock-count">${totalItems} source${totalItems!==1?'s':''}</span>
       </div>
-      <ul class="news-points">
-        ${s.points.map(p => `<li class="news-point${s.hasFiling?' filing':''}">${p}</li>`).join('')}
-      </ul>
-      ${raw && (raw.news.length||raw.filings.length) ? `<div class="news-source-links">${[...raw.filings.map(f=>`<a href="${f.url}" target="_blank" class="news-link filing-link">⚡ ${f.form} ${f.filed}</a>`), ...raw.news.map(n=>`<a href="${n.url}" target="_blank" class="news-link">↗ ${n.title.length>55?n.title.slice(0,55)+'…':n.title}</a>`)].join('')}</div>` : ''}
+      <ul class="news-points">${pointsHtml}</ul>
+      ${hasExtra ? `<div class="news-source-links">${filingLinksHtml}${extraNewsHtml}</div>` : ''}
     </div>`;
   }
-  // Stocks with raw items but not summarized
+
+  // Stocks with raw items but no AI summary — show links directly
   for (const r of rawItems) {
-    if (!summarized.has(r.sym) && (r.news.length||r.filings.length)) {
-      html += `<div class="news-stock-card">
-        <div class="news-stock-header"><span class="news-stock-sym">${r.sym}</span><span class="news-stock-count">${r.news.length+r.filings.length} items</span></div>
-        <ul class="news-points">${[...r.filings,...r.news].map(p=>`<li class="news-point">${p}</li>`).join('')}</ul>
-      </div>`;
-    }
+    if (summarized.has(r.sym)) continue;
+    if (!r.news.length && !r.filings.length) continue;
+    const items = [
+      ...r.filings.map(f => `<li class="news-point filing"><a href="${f.url}" target="_blank" class="news-bullet-link">⚡ SEC ${f.form} filing · ${f.filed} ↗</a></li>`),
+      ...r.news.map(n => `<li class="news-point"><a href="${n.url}" target="_blank" class="news-bullet-link">${n.title} ↗</a></li>`),
+    ];
+    html += `<div class="news-stock-card">
+      <div class="news-stock-header"><span class="news-stock-sym">${r.sym}</span><span class="news-stock-count">${r.news.length+r.filings.length} sources</span></div>
+      <ul class="news-points">${items.join('')}</ul>
+    </div>`;
   }
+
   html += '</div>';
   html += `<div class="news-source">Sources: Yahoo Finance · SEC EDGAR · Summarized by Claude AI · ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>`;
   el.innerHTML = html;
