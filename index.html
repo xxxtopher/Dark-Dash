@@ -829,50 +829,48 @@ async function fetchYahooNews(sym) {
   }
 }
 
-// Fetch news from Finviz for a symbol — scrapes the news table from the quote page
+// Fetch news from Finviz — confirmed working, parses id="news-table"
 async function fetchFinvizNews(sym) {
   try {
     const url = `https://finviz.com/quote.ashx?t=${sym}&p=d`;
-    const res = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(10000) });
+    const res = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(12000) });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     const html = await res.text();
-    const cutoff = Date.now() - 24*60*60*1000;
-    const items = [];
 
-    // Finviz news rows: <tr class="news_date-row"> or table id="news-table"
-    // Each row: <td class="news_date">Mar-19-26 08:30AM</td><td><a href="...">Headline</a>...
-    const rowRe = /<tr[^>]*>\s*<td[^>]*class="[^"]*news[^"]*"[^>]*>([\s\S]*?)<\/td>\s*<td[^>]*>([\s\S]*?)<\/td>/gi;
-    let lastDate = null;
-    let m;
-    while ((m = rowRe.exec(html)) !== null) {
-      const dateCell = m[1].replace(/<[^>]+>/g,'').trim();
-      const contentCell = m[2];
-      // Parse date — Finviz uses "Mar-19-26 08:30AM" or just "08:30AM" for same day
-      if (dateCell && dateCell.includes('-')) lastDate = dateCell;
-      const timeStr = dateCell || lastDate || '';
-      // Extract headline and URL
-      const linkRe = /<a[^>]+href="([^"]+)"[^>]*>([^<]+)<\/a>/i;
-      const lm = linkRe.exec(contentCell);
-      if (!lm) continue;
-      const articleUrl = lm[1];
-      const title = lm[2].trim();
+    const tableMatch = html.match(/id=["']news-table["'][^>]*>([\s\S]*?)<\/table>/i);
+    if (!tableMatch) return [];
+
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    const items = [];
+    const rows = [...tableMatch[1].matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
+    let lastDateStr = null;
+
+    for (const row of rows) {
+      const cell = row[1];
+      const dateCell = cell.match(/<td[^>]*>\s*([\w]+-\d+-\d+\s+\d+:\d+[AP]M|\d+:\d+[AP]M)\s*<\/td>/i);
+      if (dateCell) {
+        const val = dateCell[1].trim();
+        if (val.includes('-')) lastDateStr = val;
+      }
+      const link = cell.match(/<a[^>]+href="([^"]+)"[^>]*>([^<]{5,})<\/a>/i);
+      if (!link) continue;
+      const articleUrl = link[1].startsWith('http') ? link[1] : 'https://finviz.com' + link[1];
+      const title = link[2].trim();
       if (!title || title.length < 5) continue;
-      // Try to parse timestamp — if within 24h include it
-      // Finviz dates: "Mar-19-26" → today; just time "08:30AM" → today
-      const now = new Date();
-      let pubMs = now.getTime(); // default to now if can't parse
-      if (timeStr.match(/\d{1,2}:\d{2}/)) {
-        // Has a time — assume today or last date
-        const datePart = timeStr.includes('-') ? timeStr.split(' ')[0] : null;
-        if (datePart) {
-          const [mon, day, yr] = datePart.split('-');
+
+      let pubMs = Date.now();
+      if (lastDateStr) {
+        const m = lastDateStr.match(/(\w+)-(\d+)-(\d+)\s+(\d+):(\d+)([AP]M)/i);
+        if (m) {
           const months = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
-          const d = new Date(2000+parseInt(yr), months[mon], parseInt(day));
-          pubMs = d.getTime();
+          let hr = parseInt(m[4]);
+          if (m[6].toUpperCase() === 'PM' && hr !== 12) hr += 12;
+          if (m[6].toUpperCase() === 'AM' && hr === 12) hr = 0;
+          pubMs = new Date(2000 + parseInt(m[3]), months[m[1]], parseInt(m[2]), hr, parseInt(m[5])).getTime();
         }
       }
-      if (pubMs >= cutoff) {
-        items.push({ type:'news', title, url: articleUrl.startsWith('http') ? articleUrl : 'https://finviz.com'+articleUrl });
-      }
+
+      if (pubMs >= cutoff) items.push({ type: 'news', title, url: articleUrl });
       if (items.length >= 6) break;
     }
     return items;
