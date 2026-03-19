@@ -1,93 +1,102 @@
 <!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><title>Finviz Diagnostic</title>
+<head><meta charset="UTF-8"><title>Finviz Diagnostic v2</title>
 <style>body{background:#0d1117;color:#c8d8e8;font-family:monospace;padding:20px;font-size:12px}
 .ok{color:#00e676}.fail{color:#ff4444}.warn{color:#ffd700}
 button{background:#1e2a38;color:#c8d8e8;border:1px solid #253040;padding:8px 16px;cursor:pointer;font-family:monospace;margin:4px;font-size:12px}
-pre{background:#131920;padding:8px;border-radius:4px;white-space:pre-wrap;word-break:break-all;font-size:10px;max-height:300px;overflow-y:auto}
+pre{background:#131920;padding:8px;border-radius:4px;white-space:pre-wrap;word-break:break-all;font-size:10px;max-height:400px;overflow-y:auto}
 </style></head>
 <body>
-<h2 style="color:#00b4ff">Finviz Scraping Diagnostic</h2>
-<button onclick="testRaw()">1. Fetch raw Finviz HTML for ONDS</button>
-<button onclick="testParse()">2. Parse news rows from HTML</button>
-<button onclick="testMulti()">3. Test 5 symbols</button>
+<h2 style="color:#00b4ff">Finviz Diagnostic v2 — after worker update</h2>
+<p style="color:#6a8aa0;font-size:11px">First update your Cloudflare Worker with the new worker.js, then run these tests.</p>
+<button onclick="testRaw()">1. Raw HTML check</button>
+<button onclick="testStructure()">2. Find news table structure</button>
+<button onclick="testParse()">3. Parse & extract headlines</button>
 <div id="out"></div>
 <script>
 const WORKER = 'https://yahoo-proxy.topherho.workers.dev';
 const log = (msg, cls='') => { document.getElementById('out').innerHTML += '<div class="'+cls+'">'+msg+'</div>'; };
-const logPre = (msg) => { document.getElementById('out').innerHTML += '<pre>'+msg+'</pre>'; };
+const logPre = (label, content) => { document.getElementById('out').innerHTML += '<div style="color:#6a8aa0;margin-top:6px">'+label+'</div><pre>'+content+'</pre>'; };
 
-async function fetchFinviz(sym) {
+async function getFinviz(sym) {
   const url = `https://finviz.com/quote.ashx?t=${sym}&p=d`;
-  const res = await fetch(`${WORKER}?url=${encodeURIComponent(url)}`, {signal: AbortSignal.timeout(10000)});
+  const res = await fetch(`${WORKER}?url=${encodeURIComponent(url)}`, {signal: AbortSignal.timeout(12000)});
+  if (!res.ok) throw new Error('HTTP ' + res.status);
   return await res.text();
 }
 
 async function testRaw() {
-  log('<br>--- Fetching raw Finviz HTML for ONDS ---');
+  log('<br>--- Test 1: Raw HTML ---');
   try {
-    const html = await fetchFinviz('ONDS');
-    log(`✓ Got ${html.length} bytes`, 'ok');
-    // Check if it's a real page or blocked
-    if (html.includes('news-table') || html.includes('news_date')) {
-      log('✓ Found news table in HTML', 'ok');
-    } else if (html.includes('captcha') || html.includes('robot') || html.includes('blocked')) {
-      log('✗ Blocked by Finviz (captcha/robot detected)', 'fail');
+    const html = await getFinviz('ONDS');
+    log(`✓ Got ${html.length} bytes`, html.length > 5000 ? 'ok' : 'warn');
+    if (html.length < 1000) { logPre('Full response:', html); return; }
+    const lower = html.toLowerCase();
+    log(`Contains "news-table": ${lower.includes('news-table')}`, lower.includes('news-table')?'ok':'warn');
+    log(`Contains "news_date": ${lower.includes('news_date')}`, lower.includes('news_date')?'ok':'warn');
+    log(`Contains "finviz.com/news": ${lower.includes('finviz.com/news')}`, lower.includes('finviz.com/news')?'ok':'warn');
+    log(`Contains "captcha": ${lower.includes('captcha')}`, !lower.includes('captcha')?'ok':'fail');
+    log(`Contains "blocked": ${lower.includes('blocked')}`, !lower.includes('blocked')?'ok':'fail');
+    // Show first 300 chars to identify page type
+    logPre('First 300 chars:', html.slice(0,300));
+  } catch(e) { log('✗ ' + e.message, 'fail'); }
+}
+
+async function testStructure() {
+  log('<br>--- Test 2: News table structure ---');
+  try {
+    const html = await getFinviz('KTOS');
+    // Find the news table
+    const tableMatch = html.match(/id=["']news-table["'][^>]*>([\s\S]*?)<\/table>/i);
+    if (tableMatch) {
+      log('✓ Found id="news-table"', 'ok');
+      logPre('First 1000 chars of news table:', tableMatch[0].slice(0,1000));
     } else {
-      log('⚠ Page loaded but no news table found', 'warn');
-      log('First 500 chars of response:');
-      logPre(html.slice(0, 500));
+      log('✗ No id="news-table" found', 'fail');
+      // Try to find any table with dates
+      const timeMatch = html.match(/<table[^>]*>([\s\S]{0,2000}?\d+:\d+[AP]M[\s\S]{0,500}?)<\/table>/i);
+      if (timeMatch) {
+        log('⚠ Found table with time pattern', 'warn');
+        logPre('Table with times:', timeMatch[0].slice(0,800));
+      } else {
+        // Show area around any "AM" or "PM" occurrence
+        const idx = html.search(/\d{1,2}:\d{2}[AP]M/);
+        if (idx > 0) {
+          log('⚠ Found time string at position ' + idx, 'warn');
+          logPre('Context around time:', html.slice(Math.max(0,idx-200), idx+400));
+        } else {
+          log('✗ No time patterns found in HTML', 'fail');
+          logPre('HTML sample (chars 1000-2000):', html.slice(1000,2000));
+        }
+      }
     }
-    // Show a snippet around "news"
-    const idx = html.toLowerCase().indexOf('news');
-    if (idx > 0) {
-      log('HTML around first "news" occurrence:');
-      logPre(html.slice(Math.max(0,idx-100), idx+500));
-    }
-  } catch(e) { log('✗ Error: '+e.message, 'fail'); }
+  } catch(e) { log('✗ ' + e.message, 'fail'); }
 }
 
 async function testParse() {
-  log('<br>--- Parsing news rows from Finviz HTML ---');
-  try {
-    const html = await fetchFinviz('ONDS');
-    // Try multiple parsing strategies
-    // Strategy 1: news-table id
-    const t1 = html.match(/id="news-table"[\s\S]*?<\/table>/i)?.[0] ?? '';
-    log(`Strategy 1 (id=news-table): ${t1.length} chars`);
-
-    // Strategy 2: find all <tr> with date-like content
-    const rows = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
-    const newsRows = rows.filter(r => r[1].includes('finviz.com') || r[1].match(/\d+:\d+[AP]M/));
-    log(`Strategy 2 (tr with time/finviz): ${newsRows.length} rows`);
-    if (newsRows.length > 0) {
-      log('Sample row:');
-      logPre(newsRows[0][1].slice(0, 300));
-    }
-
-    // Strategy 3: find all links with news-like hrefs
-    const links = [...html.matchAll(/<a[^>]+href="([^"]*finviz\.com\/news[^"]*|https?:\/\/[^"]+)"[^>]*>([^<]{10,})<\/a>/gi)];
-    log(`Strategy 3 (news links): ${links.length} links`);
-    links.slice(0,3).forEach(l => log(`  → ${l[2].slice(0,80)} | ${l[1].slice(0,60)}`));
-
-    // Show the actual news table if found
-    if (t1) {
-      log('News table HTML snippet:');
-      logPre(t1.slice(0, 800));
-    }
-  } catch(e) { log('✗ Error: '+e.message, 'fail'); }
-}
-
-async function testMulti() {
-  log('<br>--- Testing 5 symbols ---');
-  const syms = ['ONDS','KTOS','MU','RKLB','AMAT'];
+  log('<br>--- Test 3: Extract headlines ---');
+  const syms = ['ONDS','MU','RKLB'];
   for (const sym of syms) {
     try {
-      const html = await fetchFinviz(sym);
-      const hasTable = html.includes('news-table') || html.includes('news_date');
-      const linkCount = (html.match(/finviz\.com\/news\//g) || []).length;
-      log(`${sym}: ${html.length} bytes, news-table=${hasTable}, finviz-news-links=${linkCount}`, hasTable||linkCount>0?'ok':'warn');
-    } catch(e) { log(`${sym}: ✗ ${e.message}`, 'fail'); }
+      const html = await getFinviz(sym);
+      const headlines = [];
+      // Try parsing news-table rows
+      const tableMatch = html.match(/id=["']news-table["'][^>]*>([\s\S]*?)<\/table>/i);
+      if (tableMatch) {
+        const rows = [...tableMatch[1].matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
+        for (const row of rows) {
+          const link = row[1].match(/<a[^>]+href="([^"]+)"[^>]*>([^<]{5,})<\/a>/i);
+          if (link) headlines.push({ title: link[2].trim(), url: link[1] });
+          if (headlines.length >= 3) break;
+        }
+      }
+      if (headlines.length) {
+        log(`✓ ${sym}: ${headlines.length} headlines found`, 'ok');
+        headlines.forEach(h => log(`  · ${h.title.slice(0,70)}`));
+      } else {
+        log(`✗ ${sym}: no headlines parsed from ${html.length} bytes`, 'fail');
+      }
+    } catch(e) { log(`✗ ${sym}: ${e.message}`, 'fail'); }
   }
 }
 </script>
