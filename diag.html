@@ -1,67 +1,94 @@
 <!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><title>Rate Limit Diagnostic</title>
+<head><meta charset="UTF-8"><title>Finviz Diagnostic</title>
 <style>body{background:#0d1117;color:#c8d8e8;font-family:monospace;padding:20px;font-size:12px}
 .ok{color:#00e676}.fail{color:#ff4444}.warn{color:#ffd700}
-button{background:#1e2a38;color:#c8d8e8;border:1px solid #253040;padding:8px 16px;cursor:pointer;font-family:monospace;margin:4px 2px;font-size:12px}
+button{background:#1e2a38;color:#c8d8e8;border:1px solid #253040;padding:8px 16px;cursor:pointer;font-family:monospace;margin:4px;font-size:12px}
+pre{background:#131920;padding:8px;border-radius:4px;white-space:pre-wrap;word-break:break-all;font-size:10px;max-height:300px;overflow-y:auto}
 </style></head>
 <body>
-<h2 style="color:#00b4ff">Rate Limit Diagnostic</h2>
-<p style="color:#6a8aa0">Run these IN ORDER, wait for each to finish before clicking next.</p>
-<button onclick="test1()">Test 1: 30 sequential, no delay</button>
-<button onclick="test2()">Test 2: 30 sequential, 1s delay</button>
-<button onclick="test3()">Test 3: 30 sequential, 2s delay</button>
-<button onclick="test4()">Test 4: How long to recover? (wait 60s then retry)</button>
+<h2 style="color:#00b4ff">Finviz Scraping Diagnostic</h2>
+<button onclick="testRaw()">1. Fetch raw Finviz HTML for ONDS</button>
+<button onclick="testParse()">2. Parse news rows from HTML</button>
+<button onclick="testMulti()">3. Test 5 symbols</button>
 <div id="out"></div>
 <script>
+const WORKER = 'https://yahoo-proxy.topherho.workers.dev';
 const log = (msg, cls='') => { document.getElementById('out').innerHTML += '<div class="'+cls+'">'+msg+'</div>'; };
-const PROXY = u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u);
-const YF = sym => 'https://query2.finance.yahoo.com/v8/finance/chart/'+sym+'?range=1d&interval=1d';
-const SYMS = ['URNM','REMX','COPX','GRID','XOP','SMH','AIQ','HACK','QTUM','BOTZ','BKCH','IGV','PRNT','CLOD','ITA','DRNZ','UFO','GDX','SIL','XRT','GLUX','XLP','AWAY','XBI','XLF','KBWP','MU','AMAT','KLAC','NVDA'];
+const logPre = (msg) => { document.getElementById('out').innerHTML += '<pre>'+msg+'</pre>'; };
 
-async function fetchSym(sym) {
+async function fetchFinviz(sym) {
+  const url = `https://finviz.com/quote.ashx?t=${sym}&p=d`;
+  const res = await fetch(`${WORKER}?url=${encodeURIComponent(url)}`, {signal: AbortSignal.timeout(10000)});
+  return await res.text();
+}
+
+async function testRaw() {
+  log('<br>--- Fetching raw Finviz HTML for ONDS ---');
   try {
-    const res = await fetch(PROXY(YF(sym)), {signal: AbortSignal.timeout(8000)});
-    if (!res.ok) return null;
-    const text = await res.text();
-    if (!text || text.length < 50) return null;
-    return JSON.parse(text)?.chart?.result?.[0]?.meta?.regularMarketPrice ?? null;
-  } catch(e) { return null; }
+    const html = await fetchFinviz('ONDS');
+    log(`✓ Got ${html.length} bytes`, 'ok');
+    // Check if it's a real page or blocked
+    if (html.includes('news-table') || html.includes('news_date')) {
+      log('✓ Found news table in HTML', 'ok');
+    } else if (html.includes('captcha') || html.includes('robot') || html.includes('blocked')) {
+      log('✗ Blocked by Finviz (captcha/robot detected)', 'fail');
+    } else {
+      log('⚠ Page loaded but no news table found', 'warn');
+      log('First 500 chars of response:');
+      logPre(html.slice(0, 500));
+    }
+    // Show a snippet around "news"
+    const idx = html.toLowerCase().indexOf('news');
+    if (idx > 0) {
+      log('HTML around first "news" occurrence:');
+      logPre(html.slice(Math.max(0,idx-100), idx+500));
+    }
+  } catch(e) { log('✗ Error: '+e.message, 'fail'); }
 }
 
-async function runSequential(delayMs, label) {
-  log(`<br>--- ${label} ---`);
-  let ok=0, fail=0;
-  const t0 = Date.now();
-  for (let i=0; i<SYMS.length; i++) {
-    const sym = SYMS[i];
-    if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));
-    const price = await fetchSym(sym);
-    const elapsed = ((Date.now()-t0)/1000).toFixed(1);
-    if (price) { ok++; log(`  ✓ [${String(i+1).padStart(2)}] ${sym} $${price} (${elapsed}s)`, 'ok'); }
-    else        { fail++; log(`  ✗ [${String(i+1).padStart(2)}] ${sym} FAILED (${elapsed}s)`, 'fail'); }
-  }
-  log(`Result: ${ok}/30 ok in ${((Date.now()-t0)/1000).toFixed(1)}s`, ok===30?'ok':'warn');
+async function testParse() {
+  log('<br>--- Parsing news rows from Finviz HTML ---');
+  try {
+    const html = await fetchFinviz('ONDS');
+    // Try multiple parsing strategies
+    // Strategy 1: news-table id
+    const t1 = html.match(/id="news-table"[\s\S]*?<\/table>/i)?.[0] ?? '';
+    log(`Strategy 1 (id=news-table): ${t1.length} chars`);
+
+    // Strategy 2: find all <tr> with date-like content
+    const rows = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
+    const newsRows = rows.filter(r => r[1].includes('finviz.com') || r[1].match(/\d+:\d+[AP]M/));
+    log(`Strategy 2 (tr with time/finviz): ${newsRows.length} rows`);
+    if (newsRows.length > 0) {
+      log('Sample row:');
+      logPre(newsRows[0][1].slice(0, 300));
+    }
+
+    // Strategy 3: find all links with news-like hrefs
+    const links = [...html.matchAll(/<a[^>]+href="([^"]*finviz\.com\/news[^"]*|https?:\/\/[^"]+)"[^>]*>([^<]{10,})<\/a>/gi)];
+    log(`Strategy 3 (news links): ${links.length} links`);
+    links.slice(0,3).forEach(l => log(`  → ${l[2].slice(0,80)} | ${l[1].slice(0,60)}`));
+
+    // Show the actual news table if found
+    if (t1) {
+      log('News table HTML snippet:');
+      logPre(t1.slice(0, 800));
+    }
+  } catch(e) { log('✗ Error: '+e.message, 'fail'); }
 }
 
-async function test1() { await runSequential(0,   '30 sequential, no delay'); }
-async function test2() { await runSequential(1000, '30 sequential, 1s delay between each'); }
-async function test3() { await runSequential(2000, '30 sequential, 2s delay between each'); }
-
-async function test4() {
-  log('<br>--- Waiting 60 seconds for rate limit to reset... ---', 'warn');
-  for (let i=60; i>0; i--) {
-    await new Promise(r => setTimeout(r, 1000));
-    if (i % 10 === 0) log(`  ${i}s remaining...`);
+async function testMulti() {
+  log('<br>--- Testing 5 symbols ---');
+  const syms = ['ONDS','KTOS','MU','RKLB','AMAT'];
+  for (const sym of syms) {
+    try {
+      const html = await fetchFinviz(sym);
+      const hasTable = html.includes('news-table') || html.includes('news_date');
+      const linkCount = (html.match(/finviz\.com\/news\//g) || []).length;
+      log(`${sym}: ${html.length} bytes, news-table=${hasTable}, finviz-news-links=${linkCount}`, hasTable||linkCount>0?'ok':'warn');
+    } catch(e) { log(`${sym}: ✗ ${e.message}`, 'fail'); }
   }
-  log('  Retrying 10 symbols...');
-  let ok=0;
-  for (const sym of SYMS.slice(0,10)) {
-    const price = await fetchSym(sym);
-    if (price) { ok++; log(`  ✓ ${sym} $${price}`, 'ok'); }
-    else        { log(`  ✗ ${sym} failed`, 'fail'); }
-  }
-  log(`After 60s wait: ${ok}/10 ok`, ok===10?'ok':'warn');
 }
 </script>
 </body>
