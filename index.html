@@ -1061,10 +1061,16 @@ async function loadNews(force=false) {
 }
 
 document.getElementById('newsBtn').addEventListener('click', () => {
-  newsVisible = !newsVisible;
-  document.getElementById('newsPanel').classList.toggle('visible', newsVisible);
-  document.getElementById('newsBtn').classList.toggle('active', newsVisible);
-  if (newsVisible) loadNews();
+  if (!newsVisible) {
+    // Opening — load if needed (respects cache)
+    newsVisible = true;
+    document.getElementById('newsPanel').classList.add('visible');
+    document.getElementById('newsBtn').classList.add('active');
+    loadNews();
+  } else {
+    // Already open — force refresh
+    loadNews(true);
+  }
 });
 
 
@@ -1108,11 +1114,13 @@ async function loadSentiment() {
 
 document.getElementById('refreshBtn').addEventListener('click', () => {
   for (const k of Object.keys(etfPerf)) delete etfPerf[k];
+  newsLastComputed = null; // reset news cache
   loadMarketOverview();
   loadSentiment();
   loadAll();
   loadWatchlist();
   if (breadthVisible) loadBreadth(true);
+  if (newsVisible) loadNews(true);
 });
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
