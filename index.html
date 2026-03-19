@@ -212,7 +212,15 @@
   ::-webkit-scrollbar-thumb { background:var(--border2); border-radius:2px; }
 
   @media (max-width:1100px) { .market-overview { grid-template-columns:1fr 1fr; } .theme-ranking { display:none; } }
-  @media (max-width:800px)  { .watchlist-panel { display:none; } .breadth-grid { grid-template-columns:repeat(3,1fr); } }
+  @media (max-width:800px) {
+    .content-wrap { flex-direction:column; }
+    .watchlist-panel { width:100%; height:auto; max-height:40vh; position:static; border-right:none; border-bottom:1px solid var(--border); }
+    .watchlist-cols { grid-template-columns:52px 1fr 1fr 1fr; }
+    .watchlist-row  { grid-template-columns:52px 1fr 1fr 1fr; }
+    .breadth-grid { grid-template-columns:repeat(3,1fr); }
+    .market-overview { grid-template-columns:1fr 1fr; }
+    .sentiment-bar { padding:6px 12px; }
+  }
   @media (max-width:600px)  { .market-overview { grid-template-columns:1fr; padding:10px 16px; } .bar-label { width:110px; } .bar-pct { width:52px; } }
 </style>
 </head>
@@ -821,29 +829,55 @@ async function fetchYahooNews(sym) {
   }
 }
 
-// Fetch SEC EDGAR filings for a symbol (last 2 days to catch weekend filings)
-async function fetchSECFilings(sym) {
+// Fetch news from Finviz for a symbol — scrapes the news table from the quote page
+async function fetchFinvizNews(sym) {
   try {
-    const today     = new Date().toISOString().slice(0,10);
-    const twoDaysAgo = new Date(Date.now()-2*86400000).toISOString().slice(0,10);
-    const url = `https://efts.sec.gov/LATEST/search-index?q=%22${encodeURIComponent(sym)}%22&dateRange=custom&startdt=${twoDaysAgo}&enddt=${today}&forms=8-K,4,SC+13G,SC+13D`;
-    const res = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(8000) });
-    const data = await res.json();
-    return (data?.hits?.hits ?? []).slice(0, 4).map(h => {
-      const src = h._source ?? h;
-      const form  = src.form_type  ?? src.file_type  ?? src.type ?? 'Filing';
-      const filed = src.file_date  ?? src.period_of_report ?? '';
-      const accNo = src.file_num   ?? src.accession_no ?? src.id ?? '';
-      const cik   = src.entity_id  ?? src.cik ?? '';
-      // Build EDGAR filing URL from accession number or fallback search
-      const accClean = (accNo || '').replace(/-/g,'');
-      const url = accClean && cik
-        ? `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${cik}&type=${encodeURIComponent(form)}&dateb=&owner=include&count=10`
-        : `https://efts.sec.gov/LATEST/search-index?q=%22${encodeURIComponent(sym)}%22&forms=${encodeURIComponent(form)}`;
-      return { type:'filing', form, filed, url, sym };
-    });
+    const url = `https://finviz.com/quote.ashx?t=${sym}&p=d`;
+    const res = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(10000) });
+    const html = await res.text();
+    const cutoff = Date.now() - 24*60*60*1000;
+    const items = [];
+
+    // Finviz news rows: <tr class="news_date-row"> or table id="news-table"
+    // Each row: <td class="news_date">Mar-19-26 08:30AM</td><td><a href="...">Headline</a>...
+    const rowRe = /<tr[^>]*>\s*<td[^>]*class="[^"]*news[^"]*"[^>]*>([\s\S]*?)<\/td>\s*<td[^>]*>([\s\S]*?)<\/td>/gi;
+    let lastDate = null;
+    let m;
+    while ((m = rowRe.exec(html)) !== null) {
+      const dateCell = m[1].replace(/<[^>]+>/g,'').trim();
+      const contentCell = m[2];
+      // Parse date — Finviz uses "Mar-19-26 08:30AM" or just "08:30AM" for same day
+      if (dateCell && dateCell.includes('-')) lastDate = dateCell;
+      const timeStr = dateCell || lastDate || '';
+      // Extract headline and URL
+      const linkRe = /<a[^>]+href="([^"]+)"[^>]*>([^<]+)<\/a>/i;
+      const lm = linkRe.exec(contentCell);
+      if (!lm) continue;
+      const articleUrl = lm[1];
+      const title = lm[2].trim();
+      if (!title || title.length < 5) continue;
+      // Try to parse timestamp — if within 24h include it
+      // Finviz dates: "Mar-19-26" → today; just time "08:30AM" → today
+      const now = new Date();
+      let pubMs = now.getTime(); // default to now if can't parse
+      if (timeStr.match(/\d{1,2}:\d{2}/)) {
+        // Has a time — assume today or last date
+        const datePart = timeStr.includes('-') ? timeStr.split(' ')[0] : null;
+        if (datePart) {
+          const [mon, day, yr] = datePart.split('-');
+          const months = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+          const d = new Date(2000+parseInt(yr), months[mon], parseInt(day));
+          pubMs = d.getTime();
+        }
+      }
+      if (pubMs >= cutoff) {
+        items.push({ type:'news', title, url: articleUrl.startsWith('http') ? articleUrl : 'https://finviz.com'+articleUrl });
+      }
+      if (items.length >= 6) break;
+    }
+    return items;
   } catch(e) {
-    console.warn('[sec]', sym, e.message);
+    console.warn('[finviz]', sym, e.message);
     return [];
   }
 }
@@ -853,24 +887,19 @@ async function summarizeWithClaude(allItems) {
   const hasContent = allItems.filter(s => s.news.length || s.filings.length);
   if (!hasContent.length) return null;
 
-  const prompt = `You are a financial news analyst. Below are the latest news headlines and SEC filings from the last 24 hours for a watchlist of stocks.
+  const prompt = `You are a financial news analyst. Below are the latest news headlines from the last 24 hours for a watchlist of stocks, sourced from Yahoo Finance and Finviz.
 
-For each stock that has news or filings, provide 2-4 concise bullet points summarizing the key developments. Flag SEC filings as notable events. Be factual and brief.
+For each stock, provide 2-4 concise bullet points summarizing the key developments. Be factual and brief.
 
 ${hasContent.map(s => `## ${s.sym}
-${s.news.length ? 'News:\n'+s.news.map(n=>`- ${n.title}`).join('\n') : ''}
-${s.filings.length ? 'SEC Filings:\n'+s.filings.map(f=>`- ${f.form} filed ${f.filed}`).join('\n') : ''}`).join('\n\n')}
+${s.news.map(n => `- ${n.title}`).join('\n')}`).join('\n\n')}
 
-IMPORTANT: Write each bullet point as a proper informative sentence, NOT as raw data.
-Bad: "[SEC 8-K] Ondas Inc. filed on 2026-03-12"
-Good: "Ondas filed an 8-K on Mar 12, likely disclosing a material event — review for details."
+IMPORTANT: Write each bullet point as a proper informative sentence.
 Bad: "Analyst upgrades KTOS"
 Good: "Kratos Defense received an analyst upgrade, signaling improving sentiment on defense spending."
 
 Respond ONLY in JSON (no markdown fences):
-{"stocks":[{"sym":"TICKER","points":["sentence 1","sentence 2"],"hasFiling":false}]}
-
-For hasFiling set true if any SEC filing exists for that stock.`;
+{"stocks":[{"sym":"TICKER","points":["sentence 1","sentence 2"],"hasFiling":false}]}`;
 
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -897,11 +926,8 @@ For hasFiling set true if any SEC filing exists for that stock.`;
     return {
       stocks: hasContent.map(s => ({
         sym: s.sym,
-        points: [
-          ...s.filings.map(f => `SEC ${f.form} filing detected on ${f.filed} — click link below to view.`),
-          ...s.news.map(n => n.title)
-        ].filter(Boolean).slice(0, 4),
-        hasFiling: s.filings.length > 0
+        points: s.news.map(n => n.title).slice(0, 4),
+        hasFiling: false
       }))
     };
   }
@@ -981,7 +1007,7 @@ function renderNewsSummary(summaries, rawItems) {
   }
 
   html += '</div>';
-  html += `<div class="news-source">Sources: Yahoo Finance · SEC EDGAR · Summarized by Claude AI · ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>`;
+  html += `<div class="news-source">Sources: Yahoo Finance · Finviz · Summarized by Claude AI · ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>`;
   el.innerHTML = html;
 }
 
@@ -994,40 +1020,43 @@ async function loadNews(force=false) {
   const allSyms = [...new Set(WATCHLIST.flatMap(g=>g.tickers))];
   newsLog(`Scanning ${allSyms.length} watchlist stocks...`);
 
-  // Fetch news + filings in parallel for all symbols
-  newsLog(`Fetching Yahoo Finance news...`);
-  const newsResults = await Promise.all(allSyms.map(sym => fetchYahooNews(sym)));
+  // Fetch from Yahoo Finance and Finviz in parallel for all symbols
+  newsLog(`Fetching Yahoo Finance & Finviz news...`);
+  const [yahooResults, finvizResults] = await Promise.all([
+    Promise.all(allSyms.map(sym => fetchYahooNews(sym))),
+    Promise.all(allSyms.map(sym => fetchFinvizNews(sym))),
+  ]);
 
-  newsLog(`Checking SEC EDGAR filings...`);
-  const filingResults = await Promise.all(allSyms.map(sym => fetchSECFilings(sym)));
+  // Merge and deduplicate by title
+  const rawItems = allSyms.map((sym, i) => {
+    const seen = new Set();
+    const merged = [...yahooResults[i], ...finvizResults[i]].filter(n => {
+      if (seen.has(n.title)) return false;
+      seen.add(n.title);
+      return true;
+    });
+    return { sym, news: merged, filings: [] };
+  }).filter(s => s.news.length);
 
-  const rawItems = allSyms.map((sym,i) => ({
-    sym,
-    news: newsResults[i],
-    filings: filingResults[i]
-  })).filter(s => s.news.length || s.filings.length);
-
-  const newsCount  = newsResults.reduce((a,n)=>a+n.length,0);
-  const filingCount = filingResults.reduce((a,f)=>a+f.length,0);
-  newsLog(`Found ${newsCount} headlines, ${filingCount} filings across ${rawItems.length} stocks.`, 'done');
+  const totalNews = rawItems.reduce((a,s) => a+s.news.length, 0);
+  newsLog(`Found ${totalNews} headlines across ${rawItems.length} stocks.`, 'done');
 
   if (!rawItems.length) {
     document.getElementById('newsBody').innerHTML =
-      '<div class="news-placeholder">No news or SEC filings found in the last 24h for watchlist stocks. Markets may be closed or sources temporarily unavailable.</div>';
+      '<div class="news-placeholder">No news found in the last 24h for watchlist stocks. Markets may be closed or sources temporarily unavailable.</div>';
     newsComputing = false;
     document.getElementById('newsBtn').classList.remove('computing');
     document.getElementById('newsTimestamp').textContent = 'No activity found · ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
     return;
   }
 
-  newsLog(`Found news/filings for ${rawItems.length} stocks. Generating AI summary...`);
-
+  newsLog(`Generating AI summary for ${rawItems.length} stocks...`);
   const summary = await summarizeWithClaude(rawItems);
 
   renderNewsSummary(summary, rawItems);
   newsLastComputed = Date.now();
   document.getElementById('newsTimestamp').textContent =
-    `${rawItems.length} stocks with activity · computed ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`;
+    `${rawItems.length} stocks with news · ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`;
 
   newsComputing = false;
   document.getElementById('newsBtn').classList.remove('computing');
