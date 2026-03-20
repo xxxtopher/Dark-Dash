@@ -87,15 +87,17 @@
 
   /* Sentiment Bar */
   .sentiment-bar { background:var(--bg); border-bottom:1px solid var(--border); padding:6px 28px; display:flex; gap:6px; align-items:stretch; overflow-x:auto; }
-  .sent-cell { background:var(--bg2); border:1px solid var(--border); border-radius:5px; padding:5px 10px; display:flex; flex-direction:column; justify-content:center; min-width:90px; flex:1; cursor:default; transition:border-color 0.15s; }
+  .sent-cell { background:var(--bg2); border:1px solid var(--border); border-radius:5px; padding:5px 10px 4px; display:flex; flex-direction:column; justify-content:flex-start; min-width:110px; flex:1; cursor:default; transition:border-color 0.15s; }
   .sent-cell:hover { border-color:var(--border2); }
-  .sent-label { font-size:7.5px; color:var(--text3); letter-spacing:1px; text-transform:uppercase; margin-bottom:3px; white-space:nowrap; }
+  .sent-top { display:flex; justify-content:space-between; align-items:flex-start; gap:6px; }
+  .sent-label { font-size:7.5px; color:var(--text3); letter-spacing:1px; text-transform:uppercase; margin-bottom:2px; white-space:nowrap; }
   .sent-price { font-size:13px; font-weight:700; color:var(--text); letter-spacing:-0.3px; white-space:nowrap; }
-  .sent-pct { font-size:10px; font-weight:600; margin-top:1px; white-space:nowrap; }
+  .sent-pct { font-size:10px; font-weight:600; margin-top:1px; white-space:nowrap; text-align:right; }
   .sent-pct.pos { color:var(--green); }
   .sent-pct.neg { color:var(--red); }
   .sent-pct.flat { color:var(--text3); }
   .sent-pct.loading { color:var(--text3); animation:shimmer 1.5s infinite; }
+  .sent-spark { width:100%; height:30px; margin-top:4px; display:block; }
   .market-overview { background:var(--bg2); border-bottom:1px solid var(--border); padding:8px 28px; display:grid; grid-template-columns:1fr 1fr 260px; gap:10px; align-items:stretch; }
   .market-chart-card { background:var(--bg3); border:1px solid var(--border); border-radius:6px; padding:4px 8px; display:flex; flex-direction:column; min-height:80px; }
   .market-chart-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:2px; }
@@ -277,13 +279,13 @@
 
 <!-- Sentiment Bar -->
 <div class="sentiment-bar" id="sentimentBar">
-  <div class="sent-cell" id="sent-gold">   <div class="sent-label">Gold</div>      <div class="sent-price loading" id="sent-gold-p">···</div>   <div class="sent-pct loading" id="sent-gold-c">···</div></div>
-  <div class="sent-cell" id="sent-silver"> <div class="sent-label">Silver</div>     <div class="sent-price loading" id="sent-silver-p">···</div> <div class="sent-pct loading" id="sent-silver-c">···</div></div>
-  <div class="sent-cell" id="sent-oil">   <div class="sent-label">Crude Oil</div>  <div class="sent-price loading" id="sent-oil-p">···</div>    <div class="sent-pct loading" id="sent-oil-c">···</div></div>
-  <div class="sent-cell" id="sent-tnx">   <div class="sent-label">10Y Yield</div>  <div class="sent-price loading" id="sent-tnx-p">···</div>    <div class="sent-pct loading" id="sent-tnx-c">···</div></div>
-  <div class="sent-cell" id="sent-btc">   <div class="sent-label">Bitcoin</div>    <div class="sent-price loading" id="sent-btc-p">···</div>    <div class="sent-pct loading" id="sent-btc-c">···</div></div>
-  <div class="sent-cell" id="sent-eth">   <div class="sent-label">Ethereum</div>   <div class="sent-price loading" id="sent-eth-p">···</div>    <div class="sent-pct loading" id="sent-eth-c">···</div></div>
-  <div class="sent-cell" id="sent-dxy">   <div class="sent-label">USD Index</div>  <div class="sent-price loading" id="sent-dxy-p">···</div>    <div class="sent-pct loading" id="sent-dxy-c">···</div></div>
+  <div class="sent-cell"><div class="sent-label">Gold</div><div class="sent-top"><div class="sent-price loading" id="sent-gold-p">···</div><div class="sent-pct loading" id="sent-gold-c">···</div></div><canvas class="sent-spark" id="sent-gold-k"></canvas></div>
+  <div class="sent-cell"><div class="sent-label">Silver</div><div class="sent-top"><div class="sent-price loading" id="sent-silver-p">···</div><div class="sent-pct loading" id="sent-silver-c">···</div></div><canvas class="sent-spark" id="sent-silver-k"></canvas></div>
+  <div class="sent-cell"><div class="sent-label">Crude Oil</div><div class="sent-top"><div class="sent-price loading" id="sent-oil-p">···</div><div class="sent-pct loading" id="sent-oil-c">···</div></div><canvas class="sent-spark" id="sent-oil-k"></canvas></div>
+  <div class="sent-cell"><div class="sent-label">10Y Yield</div><div class="sent-top"><div class="sent-price loading" id="sent-tnx-p">···</div><div class="sent-pct loading" id="sent-tnx-c">···</div></div><canvas class="sent-spark" id="sent-tnx-k"></canvas></div>
+  <div class="sent-cell"><div class="sent-label">Bitcoin</div><div class="sent-top"><div class="sent-price loading" id="sent-btc-p">···</div><div class="sent-pct loading" id="sent-btc-c">···</div></div><canvas class="sent-spark" id="sent-btc-k"></canvas></div>
+  <div class="sent-cell"><div class="sent-label">Ethereum</div><div class="sent-top"><div class="sent-price loading" id="sent-eth-p">···</div><div class="sent-pct loading" id="sent-eth-c">···</div></div><canvas class="sent-spark" id="sent-eth-k"></canvas></div>
+  <div class="sent-cell"><div class="sent-label">USD Index</div><div class="sent-top"><div class="sent-price loading" id="sent-dxy-p">···</div><div class="sent-pct loading" id="sent-dxy-c">···</div></div><canvas class="sent-spark" id="sent-dxy-k"></canvas></div>
 </div>
 
 <!-- Breadth Panel (hidden by default) -->
@@ -1085,29 +1087,61 @@ const SENTIMENT_TICKERS = [
   { id:'dxy',    sym:'DX-Y.NYB',fmt: p => p.toFixed(3) },
 ];
 
-function updateSentCell(id, price, pct) {
-  const pe = document.getElementById('sent-'+id+'-p');
-  const ce = document.getElementById('sent-'+id+'-c');
-  if (!pe || !ce) return;
-  const tk = SENTIMENT_TICKERS.find(t => t.id === id);
-  if (price != null) { pe.textContent = tk.fmt(price); pe.className = 'sent-price'; }
-  if (pct != null) {
-    const up = pct >= 0;
-    ce.textContent = (up?'+':'')+pct.toFixed(2)+'%';
-    ce.className = 'sent-pct '+(Math.abs(pct)<0.05?'flat':up?'pos':'neg');
-  }
+function drawSparkline(canvasId, closes, pct) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || closes.length < 2) return;
+  const W = canvas.parentElement.clientWidth || 120;
+  const H = 30;
+  canvas.width  = W * devicePixelRatio;
+  canvas.height = H * devicePixelRatio;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+
+  const mn = Math.min(...closes), mx = Math.max(...closes), rng = mx - mn || 1;
+  const toY = v => H - 2 - ((v - mn) / rng) * (H - 4);
+  const toX = i => (i / (closes.length - 1)) * W;
+
+  const up = pct >= 0;
+  const color = Math.abs(pct ?? 0) < 0.05 ? '#4a6070' : up ? '#00e676' : '#ff4444';
+
+  // Fill gradient
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, up ? 'rgba(0,230,118,0.18)' : 'rgba(255,68,68,0.18)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.beginPath();
+  ctx.moveTo(toX(0), toY(closes[0]));
+  for (let i = 1; i < closes.length; i++) ctx.lineTo(toX(i), toY(closes[i]));
+  ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
+  ctx.fillStyle = grad; ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  ctx.moveTo(toX(0), toY(closes[0]));
+  for (let i = 1; i < closes.length; i++) ctx.lineTo(toX(i), toY(closes[i]));
+  ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke();
+
+  // Dot at end
+  ctx.beginPath();
+  ctx.arc(toX(closes.length-1), toY(closes[closes.length-1]), 2, 0, Math.PI*2);
+  ctx.fillStyle = color; ctx.fill();
 }
 
 async function loadSentiment() {
   await Promise.all(SENTIMENT_TICKERS.map(async tk => {
     try {
-      const data = await fetchOne(`${YF_BASE}/v8/finance/chart/${tk.sym}?range=1d&interval=1d`);
-      const meta = data?.chart?.result?.[0]?.meta;
-      if (!meta) return;
-      const price = meta.regularMarketPrice ?? null;
-      const prev  = meta.chartPreviousClose ?? meta.previousClose ?? null;
-      const pct   = (price && prev && prev !== 0) ? ((price-prev)/prev)*100 : null;
+      // Fetch 5m intraday for sparkline + price
+      const data = await fetchOne(`${YF_BASE}/v8/finance/chart/${tk.sym}?range=1d&interval=5m`);
+      const result = data?.chart?.result?.[0];
+      if (!result) return;
+      const meta   = result.meta;
+      const price  = meta.regularMarketPrice ?? null;
+      const prev   = meta.chartPreviousClose ?? meta.previousClose ?? null;
+      const pct    = (price && prev && prev !== 0) ? ((price-prev)/prev)*100 : null;
       updateSentCell(tk.id, price, pct);
+
+      // Draw sparkline from intraday closes
+      const closes = (result.indicators?.quote?.[0]?.close ?? []).filter(v => v != null);
+      if (closes.length > 1) requestAnimationFrame(() => drawSparkline('sent-'+tk.id+'-k', closes, pct));
     } catch(e) { console.warn('[sent]', tk.sym, e.message); }
   }));
 }
