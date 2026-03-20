@@ -1087,6 +1087,19 @@ const SENTIMENT_TICKERS = [
   { id:'dxy',    sym:'DX-Y.NYB',fmt: p => p.toFixed(3) },
 ];
 
+function updateSentCell(id, price, pct) {
+  const pe = document.getElementById('sent-'+id+'-p');
+  const ce = document.getElementById('sent-'+id+'-c');
+  if (!pe || !ce) return;
+  const tk = SENTIMENT_TICKERS.find(t => t.id === id);
+  if (price != null) { pe.textContent = tk.fmt(price); pe.className = 'sent-price'; }
+  if (pct != null) {
+    const up = pct >= 0;
+    ce.textContent = (up?'+':'')+pct.toFixed(2)+'%';
+    ce.className = 'sent-pct '+(Math.abs(pct)<0.05?'flat':up?'pos':'neg');
+  }
+}
+
 function drawSparkline(canvasId, closes, pct) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || closes.length < 2) return;
@@ -1129,18 +1142,34 @@ function drawSparkline(canvasId, closes, pct) {
 async function loadSentiment() {
   await Promise.all(SENTIMENT_TICKERS.map(async tk => {
     try {
-      // Fetch 5m intraday for sparkline + price
-      const data = await fetchOne(`${YF_BASE}/v8/finance/chart/${tk.sym}?range=1d&interval=5m`);
-      const result = data?.chart?.result?.[0];
-      if (!result) return;
-      const meta   = result.meta;
-      const price  = meta.regularMarketPrice ?? null;
-      const prev   = meta.chartPreviousClose ?? meta.previousClose ?? null;
-      const pct    = (price && prev && prev !== 0) ? ((price-prev)/prev)*100 : null;
-      updateSentCell(tk.id, price, pct);
+      // Try 5m intraday first for sparkline
+      let closes = [];
+      let price = null, pct = null;
 
-      // Draw sparkline from intraday closes
-      const closes = (result.indicators?.quote?.[0]?.close ?? []).filter(v => v != null);
+      try {
+        const data5m = await fetchOne(`${YF_BASE}/v8/finance/chart/${tk.sym}?range=1d&interval=5m`);
+        const result = data5m?.chart?.result?.[0];
+        if (result) {
+          const meta = result.meta;
+          price  = meta.regularMarketPrice ?? null;
+          const prev = meta.chartPreviousClose ?? meta.previousClose ?? null;
+          pct    = (price && prev && prev !== 0) ? ((price-prev)/prev)*100 : null;
+          closes = (result.indicators?.quote?.[0]?.close ?? []).filter(v => v != null);
+        }
+      } catch(e) { /* fall through */ }
+
+      // If 5m failed or returned no data, fall back to 1d
+      if (price == null) {
+        const data1d = await fetchOne(`${YF_BASE}/v8/finance/chart/${tk.sym}?range=1d&interval=1d`);
+        const meta = data1d?.chart?.result?.[0]?.meta;
+        if (meta) {
+          price = meta.regularMarketPrice ?? null;
+          const prev = meta.chartPreviousClose ?? meta.previousClose ?? null;
+          pct = (price && prev && prev !== 0) ? ((price-prev)/prev)*100 : null;
+        }
+      }
+
+      updateSentCell(tk.id, price, pct);
       if (closes.length > 1) requestAnimationFrame(() => drawSparkline('sent-'+tk.id+'-k', closes, pct));
     } catch(e) { console.warn('[sent]', tk.sym, e.message); }
   }));
