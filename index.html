@@ -47,6 +47,8 @@
   .btn.loading .btn-icon { animation:spin 1s linear infinite; display:inline-block; }
   .btn-icon { font-size:13px; }
   @keyframes spin { to{transform:rotate(360deg)} }
+  .btn-trading-logic { text-decoration:none; }
+  .btn-trading-logic:hover { border-color:#34d399; color:#34d399; }
   .btn-news:hover { border-color:#a78bfa; color:#a78bfa; }
   .btn-news.active { border-color:#a78bfa; color:#a78bfa; background:rgba(167,139,250,0.07); }
   .btn-news.computing { opacity:0.6; pointer-events:none; }
@@ -239,6 +241,7 @@
 <div class="toolbar">
   <span class="toolbar-label">▸ 26 Thematic ETFs · 1D Performance</span>
   <div class="btn-row">
+    <a href="https://www.trading-logic.com/en" target="_blank" rel="noopener" class="btn btn-trading-logic"><span class="btn-icon">📈</span> Trading Logic</a>
     <button class="btn btn-news" id="newsBtn"><span class="btn-icon">📰</span> News & Filings</button>
     <button class="btn btn-breadth" id="breadthBtn"><span class="btn-icon">⬡</span> Market Breadth</button>
     <button class="btn" id="refreshBtn"><span class="btn-icon btn-spin">↻</span> Refresh</button>
