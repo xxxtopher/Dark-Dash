@@ -852,81 +852,50 @@ function trumpLog(msg, state='active') {
 }
 
 async function fetchTruthSocialPosts() {
-  // Truth Social public RSS feed for realDonaldTrump
-  const feeds = [
-    'https://truthsocial.com/@realDonaldTrump/feed',
-    'https://truthsocial.com/@realDonaldTrump.rss',
-  ];
-  for (const feedUrl of feeds) {
-    try {
-      const res = await fetch(`${WORKER_URL}?url=${encodeURIComponent(feedUrl)}`, { signal: AbortSignal.timeout(10000) });
-      if (!res.ok) continue;
-      const text = await res.text();
-      if (!text || text.length < 100) continue;
-
-      // Parse RSS/XML items
-      const cutoff = Date.now() - 24*60*60*1000;
-      const posts = [];
-      const items = [...text.matchAll(/<item>([\s\S]*?)<\/item>/gi)];
-      for (const item of items) {
-        const content = item[1];
-        const title   = (content.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>/i) ?? content.match(/<title>([\s\S]*?)<\/title>/i))?.[1]?.trim() ?? '';
-        const desc    = (content.match(/<description><!\[CDATA\[([\s\S]*?)\]\]><\/description>/i) ?? content.match(/<description>([\s\S]*?)<\/description>/i))?.[1]?.trim() ?? '';
-        const pubDate = (content.match(/<pubDate>([\s\S]*?)<\/pubDate>/i))?.[1]?.trim() ?? '';
-        const link    = (content.match(/<link>([\s\S]*?)<\/link>/i))?.[1]?.trim() ?? '';
-        const pubMs   = pubDate ? new Date(pubDate).getTime() : 0;
-        // Strip HTML tags from description
-        const cleanDesc = desc.replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").trim();
-        const text2 = cleanDesc || title;
-        if (text2 && pubMs >= cutoff) {
-          posts.push({ text: text2, time: pubDate, link });
-        }
-      }
-      if (posts.length > 0) return posts;
-    } catch(e) { console.warn('[trump rss]', e.message); }
-  }
-  return [];
+  // Truth Social blocks all direct RSS — use Claude with web_search to find today's posts
+  return []; // handled directly in loadTrump via Claude web_search
 }
 
-async function summarizeTrumpPosts(posts) {
-  const combined = posts.map((p,i) => `[${i+1}] ${p.text}`).join('\n\n');
-  const prompt = `You are a political analyst summarizing Donald Trump's Truth Social posts for today.
+async function loadTrumpViaClaude() {
+  const today = new Date().toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
+  const prompt = `Today is ${today}. Search the web for Donald Trump's Truth Social posts and public statements made today.
 
-Below are today's posts from @realDonaldTrump on Truth Social:
+Search for: "Trump Truth Social today" and "Trump statement ${today}"
 
-${combined}
+Then provide a structured summary of what Trump posted or said today, organized into these sections:
+1. KEY POLICY & POLITICAL STATEMENTS
+2. MARKET & ECONOMIC COMMENTARY (tariffs, trade, specific companies/sectors)
+3. GEOPOLITICAL & INTERNATIONAL
+4. GENERAL COMMENTARY
 
-Please provide a structured summary with these sections:
-1. KEY POLICY & POLITICAL STATEMENTS — major policy positions, executive actions, political announcements
-2. MARKET & ECONOMIC COMMENTARY — any mentions of markets, tariffs, trade, economy, specific companies or sectors
-3. GEOPOLITICAL & INTERNATIONAL — foreign policy, international relations, specific countries
-4. GENERAL COMMENTARY — other notable posts, attacks, cultural commentary
-
-For each section, write 2-4 bullet points. If a section has no relevant posts, omit it.
-Be factual and direct. Quote key phrases where impactful.
+For each section write 2-4 bullet points. Quote key phrases where impactful. If no content for a section, omit it.
+Include the approximate time of posts if available.
 
 Respond ONLY in JSON (no markdown fences):
-{"sections":[{"title":"KEY POLICY & POLITICAL STATEMENTS","points":["bullet 1","bullet 2"]},{"title":"MARKET & ECONOMIC COMMENTARY","points":["bullet 1"]}]}`;
+{"sections":[{"title":"KEY POLICY & POLITICAL STATEMENTS","points":["bullet 1","bullet 2"]}],"postCount":5,"note":"optional context"}`;
 
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2000,
+      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+      messages: [{ role:'user', content: prompt }]
+    })
+  });
+  const data = await res.json();
+  // Extract the final text response (after tool use)
+  const textBlock = (data.content ?? []).filter(b => b.type === 'text').map(b => b.text).join('');
+  if (!textBlock) return null;
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 2000,
-        messages: [{ role:'user', content: prompt }]
-      })
-    });
-    const data = await res.json();
-    const text = data.content?.[0]?.text ?? '';
-    return JSON.parse(text.replace(/```json|```/g,'').trim());
+    return JSON.parse(textBlock.replace(/```json|```/g,'').trim());
   } catch(e) {
-    console.warn('[trump claude]', e.message);
+    console.warn('[trump parse]', e.message, textBlock.slice(0,200));
     return null;
   }
 }
@@ -945,8 +914,15 @@ function renderTrumpSummary(summary, posts) {
     }
   }
 
-  // Show raw posts below summary
-  if (posts.length) {
+  if (summary?.note) {
+    html += `<div class="trump-section" style="border-color:rgba(239,68,68,0.3)">
+      <div class="trump-section-title" style="color:var(--text3)">ℹ NOTE</div>
+      <p style="font-size:10.5px;color:var(--text2);line-height:1.5">${summary.note}</p>
+    </div>`;
+  }
+
+  // Show raw posts if provided
+  if (posts?.length) {
     html += `<div class="trump-section">
       <div class="trump-section-title">📜 Raw Posts · ${posts.length} today</div>
       ${posts.map(p=>`<div class="trump-post">
@@ -957,7 +933,7 @@ function renderTrumpSummary(summary, posts) {
   }
 
   html += '</div>';
-  html += `<div class="trump-source">Source: Truth Social @realDonaldTrump · Summarized by Claude AI · ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>`;
+  html += `<div class="trump-source">Source: Web search via Claude AI · ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>`;
   el.innerHTML = html;
 }
 
@@ -967,31 +943,25 @@ async function loadTrump(force=false) {
   trumpComputing = true;
   document.getElementById('trumpBtn').classList.add('computing');
 
-  trumpLog('Fetching Truth Social posts...');
-  const posts = await fetchTruthSocialPosts();
+  trumpLog('Searching for today\'s Trump posts and statements...');
+  const summary = await loadTrumpViaClaude();
 
-  if (!posts.length) {
+  if (!summary?.sections?.length) {
     document.getElementById('trumpBody').innerHTML =
-      '<div class="trump-placeholder">No posts found from @realDonaldTrump in the last 24 hours. The Truth Social RSS feed may be temporarily unavailable.</div>';
-    document.getElementById('trumpTimestamp').textContent = 'No posts found · ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+      '<div class="trump-placeholder">Could not retrieve today\'s posts. Try again in a moment.</div>';
+    document.getElementById('trumpTimestamp').textContent = 'Failed · ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
     trumpComputing = false;
     document.getElementById('trumpBtn').classList.remove('computing');
     return;
   }
 
-  trumpLog(`Found ${posts.length} posts. Generating AI summary...`, 'done');
-  const summary = await summarizeTrumpPosts(posts);
-
-  if (!summary) {
-    // Fallback — show raw posts without AI summary
-    renderTrumpSummary({ sections:[] }, posts);
-  } else {
-    renderTrumpSummary(summary, posts);
-  }
+  trumpLog('Summary ready.', 'done');
+  renderTrumpSummary(summary, []);
 
   trumpLastComputed = Date.now();
+  const count = summary.postCount ? `${summary.postCount} posts found` : 'Summary ready';
   document.getElementById('trumpTimestamp').textContent =
-    `${posts.length} posts today · ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`;
+    `${count} · ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`;
   trumpComputing = false;
   document.getElementById('trumpBtn').classList.remove('computing');
 }
