@@ -1,102 +1,79 @@
 <!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><title>Finviz Diagnostic v2</title>
+<head><meta charset="UTF-8"><title>Trump RSS Diagnostic</title>
 <style>body{background:#0d1117;color:#c8d8e8;font-family:monospace;padding:20px;font-size:12px}
 .ok{color:#00e676}.fail{color:#ff4444}.warn{color:#ffd700}
 button{background:#1e2a38;color:#c8d8e8;border:1px solid #253040;padding:8px 16px;cursor:pointer;font-family:monospace;margin:4px;font-size:12px}
 pre{background:#131920;padding:8px;border-radius:4px;white-space:pre-wrap;word-break:break-all;font-size:10px;max-height:400px;overflow-y:auto}
 </style></head>
 <body>
-<h2 style="color:#00b4ff">Finviz Diagnostic v2 — after worker update</h2>
-<p style="color:#6a8aa0;font-size:11px">First update your Cloudflare Worker with the new worker.js, then run these tests.</p>
-<button onclick="testRaw()">1. Raw HTML check</button>
-<button onclick="testStructure()">2. Find news table structure</button>
-<button onclick="testParse()">3. Parse & extract headlines</button>
+<h2 style="color:#ef4444">Trump RSS Diagnostic</h2>
+<button onclick="test1()">Test 1: Try all RSS URLs</button>
+<button onclick="test2()">Test 2: Inspect raw response</button>
+<button onclick="test3()">Test 3: Try alternative sources</button>
 <div id="out"></div>
 <script>
 const WORKER = 'https://yahoo-proxy.topherho.workers.dev';
 const log = (msg, cls='') => { document.getElementById('out').innerHTML += '<div class="'+cls+'">'+msg+'</div>'; };
-const logPre = (label, content) => { document.getElementById('out').innerHTML += '<div style="color:#6a8aa0;margin-top:6px">'+label+'</div><pre>'+content+'</pre>'; };
+const logPre = (label, txt) => { document.getElementById('out').innerHTML += '<div style="color:#6a8aa0;margin-top:6px">'+label+'</div><pre>'+txt.replace(/</g,'&lt;')+'</pre>'; };
 
-async function getFinviz(sym) {
-  const url = `https://finviz.com/quote.ashx?t=${sym}&p=d`;
-  const res = await fetch(`${WORKER}?url=${encodeURIComponent(url)}`, {signal: AbortSignal.timeout(12000)});
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  return await res.text();
-}
+const URLS = [
+  'https://truthsocial.com/@realDonaldTrump/feed',
+  'https://truthsocial.com/@realDonaldTrump.rss',
+  'https://truthsocial.com/@realDonaldTrump/feed.rss',
+  'https://truthsocial.com/users/realDonaldTrump/feed',
+  'https://truthsocial.com/@realDonaldTrump.atom',
+];
 
-async function testRaw() {
-  log('<br>--- Test 1: Raw HTML ---');
+async function tryUrl(url) {
   try {
-    const html = await getFinviz('ONDS');
-    log(`✓ Got ${html.length} bytes`, html.length > 5000 ? 'ok' : 'warn');
-    if (html.length < 1000) { logPre('Full response:', html); return; }
-    const lower = html.toLowerCase();
-    log(`Contains "news-table": ${lower.includes('news-table')}`, lower.includes('news-table')?'ok':'warn');
-    log(`Contains "news_date": ${lower.includes('news_date')}`, lower.includes('news_date')?'ok':'warn');
-    log(`Contains "finviz.com/news": ${lower.includes('finviz.com/news')}`, lower.includes('finviz.com/news')?'ok':'warn');
-    log(`Contains "captcha": ${lower.includes('captcha')}`, !lower.includes('captcha')?'ok':'fail');
-    log(`Contains "blocked": ${lower.includes('blocked')}`, !lower.includes('blocked')?'ok':'fail');
-    // Show first 300 chars to identify page type
-    logPre('First 300 chars:', html.slice(0,300));
-  } catch(e) { log('✗ ' + e.message, 'fail'); }
+    const res = await fetch(`${WORKER}?url=${encodeURIComponent(url)}`, {signal: AbortSignal.timeout(10000)});
+    const text = await res.text();
+    return { ok: res.ok, status: res.status, len: text.length, text };
+  } catch(e) { return { ok: false, status: 0, len: 0, text: e.message }; }
 }
 
-async function testStructure() {
-  log('<br>--- Test 2: News table structure ---');
-  try {
-    const html = await getFinviz('KTOS');
-    // Find the news table
-    const tableMatch = html.match(/id=["']news-table["'][^>]*>([\s\S]*?)<\/table>/i);
-    if (tableMatch) {
-      log('✓ Found id="news-table"', 'ok');
-      logPre('First 1000 chars of news table:', tableMatch[0].slice(0,1000));
-    } else {
-      log('✗ No id="news-table" found', 'fail');
-      // Try to find any table with dates
-      const timeMatch = html.match(/<table[^>]*>([\s\S]{0,2000}?\d+:\d+[AP]M[\s\S]{0,500}?)<\/table>/i);
-      if (timeMatch) {
-        log('⚠ Found table with time pattern', 'warn');
-        logPre('Table with times:', timeMatch[0].slice(0,800));
-      } else {
-        // Show area around any "AM" or "PM" occurrence
-        const idx = html.search(/\d{1,2}:\d{2}[AP]M/);
-        if (idx > 0) {
-          log('⚠ Found time string at position ' + idx, 'warn');
-          logPre('Context around time:', html.slice(Math.max(0,idx-200), idx+400));
-        } else {
-          log('✗ No time patterns found in HTML', 'fail');
-          logPre('HTML sample (chars 1000-2000):', html.slice(1000,2000));
-        }
-      }
-    }
-  } catch(e) { log('✗ ' + e.message, 'fail'); }
+async function test1() {
+  log('<br>--- Testing all RSS URL variants ---');
+  for (const url of URLS) {
+    const r = await tryUrl(url);
+    const hasItems = r.text.includes('<item>') || r.text.includes('<entry>');
+    const hasXml = r.text.includes('<?xml') || r.text.includes('<rss') || r.text.includes('<feed');
+    log(`${r.ok?'✓':'✗'} [${r.status}] ${url.split('/').slice(-1)[0]} — ${r.len} bytes | xml=${hasXml} | items=${hasItems}`,
+        hasItems ? 'ok' : r.ok ? 'warn' : 'fail');
+    if (r.len > 0 && r.len < 500) log('  Response: ' + r.text.slice(0, 200), 'warn');
+  }
 }
 
-async function testParse() {
-  log('<br>--- Test 3: Extract headlines ---');
-  const syms = ['ONDS','MU','RKLB'];
-  for (const sym of syms) {
-    try {
-      const html = await getFinviz(sym);
-      const headlines = [];
-      // Try parsing news-table rows
-      const tableMatch = html.match(/id=["']news-table["'][^>]*>([\s\S]*?)<\/table>/i);
-      if (tableMatch) {
-        const rows = [...tableMatch[1].matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
-        for (const row of rows) {
-          const link = row[1].match(/<a[^>]+href="([^"]+)"[^>]*>([^<]{5,})<\/a>/i);
-          if (link) headlines.push({ title: link[2].trim(), url: link[1] });
-          if (headlines.length >= 3) break;
-        }
-      }
-      if (headlines.length) {
-        log(`✓ ${sym}: ${headlines.length} headlines found`, 'ok');
-        headlines.forEach(h => log(`  · ${h.title.slice(0,70)}`));
-      } else {
-        log(`✗ ${sym}: no headlines parsed from ${html.length} bytes`, 'fail');
-      }
-    } catch(e) { log(`✗ ${sym}: ${e.message}`, 'fail'); }
+async function test2() {
+  log('<br>--- Inspecting raw response from first URL ---');
+  const r = await tryUrl(URLS[0]);
+  log(`Status: ${r.status}, Length: ${r.len} bytes`);
+  if (r.len > 0) {
+    logPre('First 1500 chars:', r.text.slice(0, 1500));
+    // Count items
+    const items = (r.text.match(/<item>/gi) || []).length;
+    const entries = (r.text.match(/<entry>/gi) || []).length;
+    log(`<item> tags: ${items}, <entry> tags: ${entries}`, items||entries ? 'ok' : 'warn');
+    // Check dates
+    const dates = r.text.match(/<pubDate>(.*?)<\/pubDate>/gi) || r.text.match(/<updated>(.*?)<\/updated>/gi) || [];
+    log(`Date fields found: ${dates.length}`);
+    dates.slice(0,3).forEach(d => log('  ' + d));
+  }
+}
+
+async function test3() {
+  log('<br>--- Trying alternative Trump post sources ---');
+  const alts = [
+    'https://rss.app/feeds/trump-truthsocial.xml',
+    'https://truthsocial.com/@realDonaldTrump/statuses.rss',
+  ];
+  for (const url of alts) {
+    const r = await tryUrl(url);
+    const hasItems = r.text.includes('<item>') || r.text.includes('<entry>');
+    log(`${r.ok?'✓':'✗'} [${r.status}] ${url} — ${r.len} bytes | items=${hasItems}`,
+        hasItems ? 'ok' : r.ok ? 'warn' : 'fail');
+    if (hasItems) logPre('Sample:', r.text.slice(0, 800));
   }
 }
 </script>
