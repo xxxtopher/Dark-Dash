@@ -1,80 +1,72 @@
 <!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><title>Trump RSS Diagnostic</title>
+<head><meta charset="UTF-8"><title>Trump Claude Diagnostic</title>
 <style>body{background:#0d1117;color:#c8d8e8;font-family:monospace;padding:20px;font-size:12px}
 .ok{color:#00e676}.fail{color:#ff4444}.warn{color:#ffd700}
 button{background:#1e2a38;color:#c8d8e8;border:1px solid #253040;padding:8px 16px;cursor:pointer;font-family:monospace;margin:4px;font-size:12px}
-pre{background:#131920;padding:8px;border-radius:4px;white-space:pre-wrap;word-break:break-all;font-size:10px;max-height:400px;overflow-y:auto}
+pre{background:#131920;padding:8px;border-radius:4px;white-space:pre-wrap;word-break:break-all;font-size:10px;max-height:500px;overflow-y:auto}
 </style></head>
 <body>
-<h2 style="color:#ef4444">Trump RSS Diagnostic</h2>
-<button onclick="test1()">Test 1: Try all RSS URLs</button>
-<button onclick="test2()">Test 2: Inspect raw response</button>
-<button onclick="test3()">Test 3: Try alternative sources</button>
+<h2 style="color:#ef4444">Trump Claude API Diagnostic</h2>
+<button onclick="test1()">Test 1: Raw Claude API response</button>
+<button onclick="test2()">Test 2: Claude without web_search (plain summary)</button>
 <div id="out"></div>
 <script>
-const WORKER = 'https://yahoo-proxy.topherho.workers.dev';
 const log = (msg, cls='') => { document.getElementById('out').innerHTML += '<div class="'+cls+'">'+msg+'</div>'; };
-const logPre = (label, txt) => { document.getElementById('out').innerHTML += '<div style="color:#6a8aa0;margin-top:6px">'+label+'</div><pre>'+txt.replace(/</g,'&lt;')+'</pre>'; };
+const logPre = (label, txt) => { document.getElementById('out').innerHTML += '<div style="color:#6a8aa0;margin-top:6px">'+label+'</div><pre>'+String(txt).replace(/</g,'&lt;').slice(0,3000)+'</pre>'; };
 
-const URLS = [
-  'https://truthsocial.com/@realDonaldTrump/feed',
-  'https://truthsocial.com/@realDonaldTrump.rss',
-  'https://truthsocial.com/@realDonaldTrump/feed.rss',
-  'https://truthsocial.com/users/realDonaldTrump/feed',
-  'https://truthsocial.com/@realDonaldTrump.atom',
-];
-
-async function tryUrl(url) {
-  try {
-    const res = await fetch(`${WORKER}?url=${encodeURIComponent(url)}`, {signal: AbortSignal.timeout(10000)});
-    const text = await res.text();
-    return { ok: res.ok, status: res.status, len: text.length, text };
-  } catch(e) { return { ok: false, status: 0, len: 0, text: e.message }; }
+async function callClaude(body) {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify(body)
+  });
+  return { status: res.status, data: await res.json() };
 }
 
 async function test1() {
-  log('<br>--- Testing all RSS URL variants ---');
-  for (const url of URLS) {
-    const r = await tryUrl(url);
-    const hasItems = r.text.includes('<item>') || r.text.includes('<entry>');
-    const hasXml = r.text.includes('<?xml') || r.text.includes('<rss') || r.text.includes('<feed');
-    log(`${r.ok?'✓':'✗'} [${r.status}] ${url.split('/').slice(-1)[0]} — ${r.len} bytes | xml=${hasXml} | items=${hasItems}`,
-        hasItems ? 'ok' : r.ok ? 'warn' : 'fail');
-    if (r.len > 0 && r.len < 500) log('  Response: ' + r.text.slice(0, 200), 'warn');
-  }
+  log('<br>--- Test 1: Claude with web_search tool ---');
+  log('Calling Claude API with web_search...');
+  const today = new Date().toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
+  try {
+    const { status, data } = await callClaude({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1000,
+      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+      messages: [{ role:'user', content: `Search for Trump Truth Social posts today ${today} and summarize in 2 sentences.` }]
+    });
+    log(`HTTP status: ${status}`, status===200?'ok':'fail');
+    log(`Stop reason: ${data.stop_reason}`);
+    log(`Content blocks: ${data.content?.length ?? 0}`);
+    data.content?.forEach((b,i) => {
+      log(`  Block ${i}: type=${b.type}`);
+      if (b.type==='text') logPre(`  Text block ${i}:`, b.text);
+      if (b.type==='tool_use') log(`  Tool: ${b.name}, input: ${JSON.stringify(b.input).slice(0,100)}`);
+      if (b.type==='tool_result') logPre(`  Tool result:`, JSON.stringify(b));
+    });
+    if (data.error) log(`API Error: ${data.error.type} — ${data.error.message}`, 'fail');
+    logPre('Full raw response:', JSON.stringify(data, null, 2));
+  } catch(e) { log('✗ Exception: ' + e.message, 'fail'); }
 }
 
 async function test2() {
-  log('<br>--- Inspecting raw response from first URL ---');
-  const r = await tryUrl(URLS[0]);
-  log(`Status: ${r.status}, Length: ${r.len} bytes`);
-  if (r.len > 0) {
-    logPre('First 1500 chars:', r.text.slice(0, 1500));
-    // Count items
-    const items = (r.text.match(/<item>/gi) || []).length;
-    const entries = (r.text.match(/<entry>/gi) || []).length;
-    log(`<item> tags: ${items}, <entry> tags: ${entries}`, items||entries ? 'ok' : 'warn');
-    // Check dates
-    const dates = r.text.match(/<pubDate>(.*?)<\/pubDate>/gi) || r.text.match(/<updated>(.*?)<\/updated>/gi) || [];
-    log(`Date fields found: ${dates.length}`);
-    dates.slice(0,3).forEach(d => log('  ' + d));
-  }
-}
-
-async function test3() {
-  log('<br>--- Trying alternative Trump post sources ---');
-  const alts = [
-    'https://rss.app/feeds/trump-truthsocial.xml',
-    'https://truthsocial.com/@realDonaldTrump/statuses.rss',
-  ];
-  for (const url of alts) {
-    const r = await tryUrl(url);
-    const hasItems = r.text.includes('<item>') || r.text.includes('<entry>');
-    log(`${r.ok?'✓':'✗'} [${r.status}] ${url} — ${r.len} bytes | items=${hasItems}`,
-        hasItems ? 'ok' : r.ok ? 'warn' : 'fail');
-    if (hasItems) logPre('Sample:', r.text.slice(0, 800));
-  }
+  log('<br>--- Test 2: Claude without tools (knowledge only) ---');
+  const today = new Date().toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
+  try {
+    const { status, data } = await callClaude({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 500,
+      messages: [{ role:'user', content: `What has Donald Trump posted or said publicly today ${today}? Give a brief summary in JSON: {"sections":[{"title":"SUMMARY","points":["point1"]}]}` }]
+    });
+    log(`HTTP status: ${status}`, status===200?'ok':'fail');
+    const text = data.content?.filter(b=>b.type==='text').map(b=>b.text).join('') ?? '';
+    logPre('Response text:', text);
+    if (data.error) log(`API Error: ${data.error.type} — ${data.error.message}`, 'fail');
+  } catch(e) { log('✗ Exception: ' + e.message, 'fail'); }
 }
 </script>
 </body>
