@@ -430,6 +430,28 @@ const YF_BASE = 'https://query2.finance.yahoo.com';
 const WORKER_URL = 'https://yahoo-proxy.topherho.workers.dev';
 // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
+// ▼▼▼ REPLACE THIS with your Anthropic API key (for News AI summary & Trump Daily) ▼▼▼
+const ANTHROPIC_KEY = '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';
+// ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+// Helper: call Claude API
+async function claudeCall(body) {
+  if (!ANTHROPIC_KEY || ANTHROPIC_KEY === 'YOUR_ANTHROPIC_API_KEY_HERE') {
+    throw new Error('Anthropic API key not configured');
+  }
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+      'x-api-key': ANTHROPIC_KEY,
+    },
+    body: JSON.stringify(body)
+  });
+  return res.json();
+}
+
 // Fallback to allorigins while worker is not configured (limited to ~13 req/min)
 const PROXY = WORKER_URL
   ? url => `${WORKER_URL}?url=${encodeURIComponent(url)}`
@@ -874,22 +896,13 @@ Include the approximate time of posts if available.
 Respond ONLY in JSON (no markdown fences):
 {"sections":[{"title":"KEY POLICY & POLITICAL STATEMENTS","points":["bullet 1","bullet 2"]}],"postCount":5,"note":"optional context"}`;
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 2000,
-      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-      messages: [{ role:'user', content: prompt }]
-    })
+  const data = await claudeCall({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 2000,
+    tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+    messages: [{ role:'user', content: prompt }]
   });
-  const data = await res.json();
-  // Extract the final text response (after tool use)
+  // Extract the final text response (after tool use blocks)
   const textBlock = (data.content ?? []).filter(b => b.type === 'text').map(b => b.text).join('');
   if (!textBlock) return null;
   try {
@@ -1086,20 +1099,11 @@ Respond ONLY in JSON (no markdown fences):
 {"stocks":[{"sym":"TICKER","points":["sentence 1","sentence 2"],"hasFiling":false}]}`;
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 2000,
-        messages: [{ role: 'user', content: prompt }]
-      })
+    const data = await claudeCall({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2000,
+      messages: [{ role: 'user', content: prompt }]
     });
-    const data = await res.json();
     const text = data.content?.[0]?.text ?? '';
     const clean = text.replace(/```json|```/g,'').trim();
     return JSON.parse(clean);
