@@ -180,22 +180,26 @@
   .content-wrap { display:flex; align-items:flex-start; }
 
   /* Watchlist */
-  .watchlist-panel { width:240px; flex-shrink:0; border-right:1px solid var(--border); position:sticky; top:48px; height:calc(100vh - 48px); overflow-y:auto; background:var(--bg2); }
+  .watchlist-panel { width:520px; flex-shrink:0; border-right:1px solid var(--border); position:sticky; top:48px; height:calc(100vh - 48px); overflow-y:auto; background:var(--bg2); }
   .watchlist-header { padding:8px 12px 4px; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--bg2); z-index:10; }
-  .watchlist-title { font-size:9.5px; color:var(--text3); letter-spacing:1.5px; text-transform:uppercase; margin-bottom:4px; }
+  .watchlist-title { font-size:11px; color:var(--text3); letter-spacing:1.5px; text-transform:uppercase; margin-bottom:4px; }
   .watchlist-cols { display:grid; grid-template-columns:44px 1fr 1fr 1fr; }
-  .wcol-label { font-size:8px; color:var(--text3); letter-spacing:0.8px; text-transform:uppercase; text-align:right; }
+  .wcol-label { font-size:9px; color:var(--text3); letter-spacing:0.8px; text-transform:uppercase; text-align:right; }
   .wcol-label:first-child { text-align:left; }
-  .watchlist-group-label { font-size:8.5px; color:var(--text3); letter-spacing:1.5px; text-transform:uppercase; padding:6px 12px 2px; background:var(--bg2); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:5px; }
+  .watchlist-group-label { font-size:9.5px; color:var(--text3); letter-spacing:1.5px; text-transform:uppercase; padding:6px 12px 2px; background:var(--bg2); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:5px; }
   .watchlist-group-label::after { content:''; flex:1; height:1px; background:var(--border); }
   .watchlist-row { display:grid; grid-template-columns:48px 1fr 1fr 1fr; gap:2px; padding:4px 12px; border-bottom:1px solid rgba(255,255,255,0.03); cursor:pointer; transition:background 0.12s; align-items:center; }
   .watchlist-row:hover { background:var(--bg3); }
-  .w-ticker { font-size:11.5px; font-weight:600; color:var(--text); }
-  .w-val { font-size:11px; font-weight:600; text-align:right; }
+  .w-ticker { font-size:12.5px; font-weight:600; color:var(--text); }
+  .w-val { font-size:12px; font-weight:600; text-align:right; }
   .w-val.pos { color:var(--green); }
   .w-val.neg { color:var(--red); }
   .w-val.flat { color:var(--text3); }
-  .w-val.loading { color:var(--text3); font-size:8.5px; font-weight:400; animation:shimmer 1.5s infinite; }
+  .w-val.loading { color:var(--text3); font-size:9.5px; font-weight:400; animation:shimmer 1.5s infinite; }
+
+  .watchlist-columns { display:grid; grid-template-columns:1fr 1fr; align-items:start; }
+  .watchlist-col { border-right:1px solid var(--border); }
+  .watchlist-col:last-child { border-right:none; }
 
   /* Bar chart main area */
   .main-content { flex:1; min-width:0; padding-bottom:40px; min-height:10px; }
@@ -241,16 +245,19 @@
   ::-webkit-scrollbar-thumb { background:var(--border2); border-radius:2px; }
 
   @media (max-width:1100px) { .market-overview { grid-template-columns:1fr 1fr; } .theme-ranking { display:none; } }
-  @media (max-width:800px) {
+  @media (max-width:900px) {
     .content-wrap { flex-direction:column; }
-    .watchlist-panel { width:100%; height:auto; max-height:40vh; position:static; border-right:none; border-bottom:1px solid var(--border); }
-    .watchlist-cols { grid-template-columns:52px 1fr 1fr 1fr; }
-    .watchlist-row  { grid-template-columns:52px 1fr 1fr 1fr; }
+    .watchlist-panel { width:100%; height:auto; max-height:55vh; position:static; border-right:none; border-bottom:1px solid var(--border); }
+    .watchlist-columns { grid-template-columns:1fr 1fr; }
     .breadth-grid { grid-template-columns:repeat(3,1fr); }
     .market-overview { grid-template-columns:1fr 1fr; }
     .sentiment-bar { padding:6px 12px; }
   }
-  @media (max-width:600px)  { .market-overview { grid-template-columns:1fr; padding:10px 16px; } .bar-label { width:110px; } .bar-pct { width:52px; } }
+  @media (max-width:600px) {
+    .watchlist-columns { grid-template-columns:1fr; }
+    .market-overview { grid-template-columns:1fr; padding:10px 16px; }
+    .bar-pct { width:52px; }
+  }
 </style>
 </head>
 <body>
@@ -807,12 +814,14 @@ document.getElementById('breadthBtn').addEventListener('click', () => {
 
 // ─── WATCHLIST ────────────────────────────────────────────────────────────────
 const WATCHLIST = [
-  { group:'DRONES & DEFENSE', color:'#ef9a9a', tickers:['ONDS','RCAT','KTOS','AVAV','UMAC','LASR','LPTH','OUST','FEIM','DPRO','SWMR'] },
-  { group:'PHOTONICS',        color:'#80cbc4', tickers:['LITE','COHR','AAOI','GLW','FN','POET','MTSI','TSEM'] },
-  { group:'MEMORY',           color:'#ce93d8', tickers:['MU','SNDK','WDC','STX','CAMT','ONTO'] },
-  { group:'SEMICON EQUIP',    color:'#fff176', tickers:['AMAT','TER','KLAC','FORM','LRCX','AMKR'] },
+  { group:'PHOTONICS',          color:'#80cbc4', tickers:['LITE','COHR','AAOI','GLW','FN','POET','MTSI','TSEM','CIEN','KEYS','AXTI'] },
+  { group:'MEMORY',             color:'#ce93d8', tickers:['MU','SNDK','WDC','STX','CAMT','ONTO','MTSI'] },
+  { group:'SEMICON EQUIP',      color:'#fff176', tickers:['AMAT','TER','KLAC','FORM','LRCX','AMKR','AEHR'] },
+  { group:'SEMI',               color:'#4fc3f7', tickers:['TSM','ASML','ARM','TTMI','INTC','ADI','LSCC','ASX'] },
+  { group:'AI ELECTRICITY',     color:'#a5d6a7', tickers:['VICR','FLNC','BE','EOSE','MPWR','NRGV','FCEL','FPS','PLUG','ETN','NXT','BLDP'] },
   { group:'URANIUM & RARE EARTH', color:'#ff9800', tickers:['UUUU','UEC','USAR','MP','LEU','UAMY','NB','BWXT'] },
-  { group:'SPACE',            color:'#b388ff', tickers:['ASTS','PL','RDW','VELO','DXYZ','RKLB','LUNR','ATI','GSAT','IRDM'] },
+  { group:'SPACE',              color:'#b388ff', tickers:['ASTS','PL','RDW','VELO','DXYZ','RKLB','LUNR','ATI','GSAT','IRDM'] },
+  { group:'DRONES & DEFENSE',   color:'#ef9a9a', tickers:['ONDS','RCAT','KTOS','AVAV','UMAC','LASR','LPTH','OUST','FEIM','DPRO','SWMR'] },
 ];
 const wlData = {};
 
@@ -822,9 +831,13 @@ function wlFmt(v, decimals=1) { return v!=null ? (v>=0?'+':'')+v.toFixed(decimal
 function renderWatchlist() {
   const body = document.getElementById('watchlistBody');
   if (!body) return;
-  let html = '';
-  for (const grp of WATCHLIST) {
-    html += '<div class="watchlist-group-label" style="color:' + grp.color + '">' + grp.group + '</div>';
+
+  // Split groups into two columns (left: first half, right: second half)
+  const mid = Math.ceil(WATCHLIST.length / 2);
+  const cols = [WATCHLIST.slice(0, mid), WATCHLIST.slice(mid)];
+
+  const renderGroup = (grp) => {
+    let html = '<div class="watchlist-group-label" style="color:' + grp.color + '">' + grp.group + '</div>';
     for (const sym of grp.tickers) {
       const d = wlData[sym] || {};
       html += '<div class="watchlist-row" onclick="window.open(\'' + tvUrl(sym) + '\',\'_blank\')">' +
@@ -834,8 +847,14 @@ function renderWatchlist() {
         '<div class="w-val ' + wlClass(d.w52 != null ? -d.w52 : null) + '">' + (d.w52!=null ? '-'+d.w52.toFixed(1)+'%' : '···') + '</div>' +
       '</div>';
     }
-  }
-  body.innerHTML = html;
+    return html;
+  };
+
+  body.innerHTML =
+    '<div class="watchlist-columns">' +
+      '<div class="watchlist-col">' + cols[0].map(renderGroup).join('') + '</div>' +
+      '<div class="watchlist-col">' + cols[1].map(renderGroup).join('') + '</div>' +
+    '</div>';
 }
 
 async function loadWatchlist() {
