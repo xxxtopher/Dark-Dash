@@ -125,7 +125,7 @@
   .sent-pct.flat { color:var(--text3); }
   .sent-pct.loading { color:var(--text3); animation:shimmer 1.5s infinite; }
   .sent-spark { width:100%; height:30px; margin-top:4px; display:block; }
-  .market-overview { background:var(--bg2); border-bottom:1px solid var(--border); padding:8px 28px; display:grid; grid-template-columns:1fr 1fr 260px; gap:10px; align-items:stretch; }
+  .market-overview { background:var(--bg2); border-bottom:1px solid var(--border); padding:8px 28px; display:grid; grid-template-columns:1fr 1fr 220px 220px; gap:10px; align-items:stretch; }
   .market-chart-card { background:var(--bg3); border:1px solid var(--border); border-radius:6px; padding:4px 8px; display:flex; flex-direction:column; min-height:80px; }
   .market-chart-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:2px; }
   .market-chart-title { font-size:9px; color:var(--text3); letter-spacing:0.8px; text-transform:uppercase; }
@@ -310,6 +310,12 @@
       <div class="ranking-row"><span class="ranking-name">—</span><span class="ranking-pct loading">···</span></div>
       <div class="ranking-row"><span class="ranking-name">—</span><span class="ranking-pct loading">···</span></div>
       <div class="ranking-row"><span class="ranking-name">—</span><span class="ranking-pct loading">···</span></div>
+    </div>
+  </div>
+  <div class="theme-ranking">
+    <div class="ranking-title">▸ Watchlist Top Performers · 1D</div>
+    <div id="wlTopTable">
+      <div class="ranking-row"><span class="ranking-name" style="color:var(--text3);font-style:italic">Loading...</span></div>
     </div>
   </div>
 </div>
@@ -580,6 +586,28 @@ function renderThemeRanking() {
     '<div class="ranking-section-label top">\u25b2 Leaders</div>' + top.map(row).join('') +
     '<hr class="ranking-divider">' +
     '<div class="ranking-section-label bot">\u25bc Laggards</div>' + bot.map(row).join('');
+}
+
+function renderWlTopPerformers() {
+  const el = document.getElementById('wlTopTable');
+  if (!el) return;
+  const allSyms = [...new Set(WATCHLIST.flatMap(g => g.tickers))];
+  const ranked = allSyms
+    .filter(s => wlData[s]?.d1 != null)
+    .map(s => ({ sym: s, pct: wlData[s].d1 }))
+    .sort((a, b) => b.pct - a.pct);
+  if (!ranked.length) {
+    el.innerHTML = '<div class="ranking-row"><span class="ranking-name" style="color:var(--text3);font-style:italic">Loading...</span></div>';
+    return;
+  }
+  const top10 = ranked.slice(0, 10);
+  const row = t => '<div class="ranking-row" onclick="window.open(\'' + tvUrl(t.sym) + '\',\'_blank\')" style="cursor:pointer">' +
+    '<span class="ranking-name">' + t.sym + '</span>' +
+    '<span class="ranking-pct ' + (t.pct >= 0 ? 'pos' : 'neg') + '">' + (t.pct >= 0 ? '+' : '') + t.pct.toFixed(2) + '%</span>' +
+    '</div>';
+  el.innerHTML =
+    '<div class="ranking-section-label top">\u25b2 Top 10 · 1D</div>' +
+    top10.map(row).join('');
 }
 
 // ─── LOAD ALL ETFs ────────────────────────────────────────────────────────────
@@ -884,6 +912,7 @@ async function loadWatchlist() {
       wlData[sym] = { d1, d5, w52 };
     } catch(e) { console.warn('[wl]', sym, e.message); }
     renderWatchlist();
+    renderWlTopPerformers();
   };
 
   if (WORKER_URL) {
