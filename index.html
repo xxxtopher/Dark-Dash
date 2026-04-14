@@ -600,13 +600,13 @@ function renderWlTopPerformers() {
     el.innerHTML = '<div class="ranking-row"><span class="ranking-name" style="color:var(--text3);font-style:italic">Loading...</span></div>';
     return;
   }
-  const top10 = ranked.slice(0, 10);
+  const top10 = ranked.slice(0, 15);
   const row = t => '<div class="ranking-row" onclick="window.open(\'' + tvUrl(t.sym) + '\',\'_blank\')" style="cursor:pointer">' +
     '<span class="ranking-name">' + t.sym + '</span>' +
     '<span class="ranking-pct ' + (t.pct >= 0 ? 'pos' : 'neg') + '">' + (t.pct >= 0 ? '+' : '') + t.pct.toFixed(2) + '%</span>' +
     '</div>';
   el.innerHTML =
-    '<div class="ranking-section-label top">\u25b2 Top 10 · 1D</div>' +
+    '<div class="ranking-section-label top">\u25b2 Top 15 · 1D</div>' +
     top10.map(row).join('');
 }
 
@@ -1101,6 +1101,26 @@ function newsLog(msg, state='active') {
 }
 
 // Fetch Yahoo Finance news for a symbol via worker proxy
+// Filter out headlines that are just about stock price/performance — not corporate news
+function isPriceNews(title) {
+  const t = title.toLowerCase();
+  const pricePatterns = [
+    /\bstock (is |was |has |falls?|rises?|drops?|surges?|jumps?|climbs?|slides?|slips?|rallies?|tumbles?|soars?|plunges?|dips?|gains?|loses?|up |down )/,
+    /\b(up|down|gained?|lost?|fell|risen?|dropped?)\s+\d/,
+    /\b\d+(\.\d+)?%\s+(gain|loss|drop|rise|fall|jump|slide|surge|rally|decline|increase|decrease)/,
+    /\bshares?\s+(fall|rise|drop|jump|climb|surge|rally|tumble|soar|plunge|slip|gain|lose|up|down)/,
+    /\b(price target|pt |pt:)\b/,
+    /\b(buy|sell|hold|neutral|outperform|underperform|overweight|underweight|upgrade|downgrade)\b.*\b(rating|target|price)\b/,
+    /\btrading (up|down|higher|lower)\b/,
+    /\bmarket cap\b.*\b(billion|million)\b/,
+    /why (is |was )?\w+ (stock )?(falling|rising|dropping|surging|up|down)\b/,
+    /\b52.week (high|low)\b/,
+    /\bearnings (beat|miss|topped?|exceeded?|fell short)\b/,
+    /\b(q[1-4]|fourth|third|second|first) quarter (earnings|results|revenue)\b/,
+  ];
+  return pricePatterns.some(re => re.test(t));
+}
+
 async function fetchYahooNews(sym) {
   try {
     // Yahoo Finance search endpoint — returns news in .news[]
@@ -1111,7 +1131,7 @@ async function fetchYahooNews(sym) {
     return (data?.news ?? [])
       .filter(n => (n.providerPublishTime ?? 0) * 1000 > cutoff)
       .map(n => ({ type:'news', title: n.title, url: n.link ?? `https://finance.yahoo.com/quote/${sym}/news/` }))
-      .filter(n => n.title)
+      .filter(n => n.title && !isPriceNews(n.title))
       .slice(0, 5);
   } catch(e) {
     console.warn('[news]', sym, e.message);
@@ -1160,7 +1180,7 @@ async function fetchFinvizNews(sym) {
         }
       }
 
-      if (pubMs >= cutoff) items.push({ type: 'news', title, url: articleUrl });
+      if (pubMs >= cutoff && !isPriceNews(title)) items.push({ type: 'news', title, url: articleUrl });
       if (items.length >= 6) break;
     }
     return items;
