@@ -395,7 +395,7 @@
 
 <div class="status-bar">
   <div class="status-left">
-    <div class="status-item">ETFs loaded <span id="statusLoaded">0</span>/26</div>
+    <div class="status-item">ETFs loaded <span id="statusLoaded">0</span>/28</div>
     <div class="status-item">SOURCE <span>Yahoo Finance · Direct</span></div>
   </div>
   <div>DATA MAY BE DELAYED 15–20 MIN</div>
@@ -431,6 +431,8 @@ const THEMES = [
   { id:'healthcare', name:'HEALTHCARE & BIOTECH',etf:'XBI',  color:'#26c6da', category:'HEALTHCARE',          holdings:['LLY','UNH','ABBV','MRK','AMGN','GILD','VRTX','REGN','MRNA','BNTX'] },
   { id:'financial',  name:'FINANCIALS',          etf:'XLF',  color:'#90caf9', category:'FINANCIALS',          holdings:['JPM','BAC','WFC','GS','MS','BLK','AXP','SPGI','MCO','CME'] },
   { id:'nonbank',    name:'NON-BANK FINANCIALS',  etf:'KBWP', color:'#b39ddb', category:'FINANCIALS',         holdings:['V','MA','PYPL','SQ','COIN','HOOD','SOFI','AFRM','UPST','LC','OMF','ALLY','COF','DFS','SYF','CACC'] },
+  { id:'travellog',  name:'TRAVEL & LOGISTICS',   etf:'JETS', color:'#4dd0e1', category:'CONSUMER',            holdings:['DAL','UAL','AAL','LUV','JBLU','ALK','UBER','LYFT','FDX','UPS','XPO','SBLK'] },
+  { id:'digitalent', name:'DIGITAL ENTERTAINMENT',etf:'HERO', color:'#f06292', category:'TECHNOLOGY',          holdings:['MSFT','SONY','TTWO','EA','RBLX','U','PLTK','NFLX','DIS','SPOT','MTCH','BMBL'] },
 ];
 
 // ─── FETCH ────────────────────────────────────────────────────────────────────
@@ -842,7 +844,7 @@ document.getElementById('breadthBtn').addEventListener('click', () => {
 
 // ─── WATCHLIST ────────────────────────────────────────────────────────────────
 const WATCHLIST = [
-  { group:'PHOTONICS',          color:'#80cbc4', tickers:['LITE','COHR','AAOI','GLW','FN','POET','MTSI','TSEM','CIEN','KEYS','AXTI'] },
+  { group:'PHOTONICS',          color:'#80cbc4', tickers:['LITE','COHR','AAOI','GLW','FN','POET','MTSI','TSEM','CIEN','KEYS','AXTI','ALMU'] },
   { group:'MEMORY',             color:'#ce93d8', tickers:['MU','SNDK','WDC','STX','CAMT','ONTO','MTSI'] },
   { group:'SEMICON EQUIP',      color:'#fff176', tickers:['AMAT','TER','KLAC','FORM','LRCX','AMKR','AEHR'] },
   { group:'SEMI',               color:'#4fc3f7', tickers:['TSM','ASML','ARM','TTMI','INTC','ADI','LSCC','ASX'] },
