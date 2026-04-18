@@ -49,6 +49,9 @@
   @keyframes spin { to{transform:rotate(360deg)} }
   .btn-trading-logic { text-decoration:none; }
   .btn-trading-logic:hover { border-color:#34d399; color:#34d399; }
+  .btn-movers:hover { border-color:#fb923c; color:#fb923c; }
+  .btn-movers.active { border-color:#fb923c; color:#fb923c; background:rgba(251,146,60,0.07); }
+  .btn-movers.computing { opacity:0.6; pointer-events:none; }
   .btn-trump:hover { border-color:#ef4444; color:#ef4444; }
   .btn-trump.active { border-color:#ef4444; color:#ef4444; background:rgba(239,68,68,0.07); }
   .btn-trump.computing { opacity:0.6; pointer-events:none; }
@@ -274,6 +277,7 @@
   <span class="toolbar-label">▸ 26 Thematic ETFs · 1D Performance</span>
   <div class="btn-row">
     <a href="https://www.trading-logic.com/en" target="_blank" rel="noopener" class="btn btn-trading-logic"><span class="btn-icon">📈</span> Trading Logic</a>
+    <button class="btn btn-movers" id="moversBtn"><span class="btn-icon">🔥</span> Theme Movers</button>
     <button class="btn btn-trump" id="trumpBtn"><span class="btn-icon">🇺🇸</span> Trump Daily</button>
     <button class="btn btn-news" id="newsBtn"><span class="btn-icon">📰</span> News & Filings</button>
     <button class="btn btn-breadth" id="breadthBtn"><span class="btn-icon">⬡</span> Market Breadth</button>
@@ -313,9 +317,12 @@
     </div>
   </div>
   <div class="theme-ranking">
-    <div class="ranking-title">▸ Watchlist Top Performers · 1D</div>
+    <div class="ranking-title" style="display:flex;justify-content:space-between;align-items:center">
+      <span>▸ Theme Top Movers · 1D</span>
+      <span id="moversStatus" style="font-size:8px;color:var(--text3)">click 🔥 to load</span>
+    </div>
     <div id="wlTopTable">
-      <div class="ranking-row"><span class="ranking-name" style="color:var(--text3);font-style:italic">Loading...</span></div>
+      <div class="ranking-row"><span class="ranking-name" style="color:var(--text3);font-style:italic;font-size:9px">Click "Theme Movers" to scan 238 holdings</span></div>
     </div>
   </div>
 </div>
@@ -590,27 +597,67 @@ function renderThemeRanking() {
     '<div class="ranking-section-label bot">\u25bc Laggards</div>' + bot.map(row).join('');
 }
 
+// ─── THEME MOVERS (on-demand) ─────────────────────────────────────────────────
+const holdingPerf = {}; // sym -> { pct, price }
+let moversComputing = false;
+let moversLoaded = false;
+
 function renderWlTopPerformers() {
+  // Called during watchlist load — no-op now, movers are on-demand
+}
+
+function renderThemeMovers() {
   const el = document.getElementById('wlTopTable');
+  const statusEl = document.getElementById('moversStatus');
   if (!el) return;
-  const allSyms = [...new Set(WATCHLIST.flatMap(g => g.tickers))];
-  const ranked = allSyms
-    .filter(s => wlData[s]?.d1 != null)
-    .map(s => ({ sym: s, pct: wlData[s].d1 }))
+  const ranked = Object.entries(holdingPerf)
+    .filter(([, d]) => d.pct != null)
+    .map(([sym, d]) => ({ sym, pct: d.pct }))
     .sort((a, b) => b.pct - a.pct);
-  if (!ranked.length) {
-    el.innerHTML = '<div class="ranking-row"><span class="ranking-name" style="color:var(--text3);font-style:italic">Loading...</span></div>';
-    return;
-  }
-  const top10 = ranked.slice(0, 15);
+  if (!ranked.length) return;
+  const top15 = ranked.slice(0, 15);
   const row = t => '<div class="ranking-row" onclick="window.open(\'' + tvUrl(t.sym) + '\',\'_blank\')" style="cursor:pointer">' +
     '<span class="ranking-name">' + t.sym + '</span>' +
     '<span class="ranking-pct ' + (t.pct >= 0 ? 'pos' : 'neg') + '">' + (t.pct >= 0 ? '+' : '') + t.pct.toFixed(2) + '%</span>' +
     '</div>';
-  el.innerHTML =
-    '<div class="ranking-section-label top">\u25b2 Top 15 · 1D</div>' +
-    top10.map(row).join('');
+  el.innerHTML = '<div class="ranking-section-label top">▲ Top 15 Holdings · 1D</div>' + top15.map(row).join('');
+  if (statusEl) statusEl.textContent = ranked.length + ' loaded';
 }
+
+async function loadThemeMovers() {
+  if (moversComputing) return;
+  moversComputing = true;
+  document.getElementById('moversBtn').classList.add('computing');
+  const statusEl = document.getElementById('moversStatus');
+  const el = document.getElementById('wlTopTable');
+
+  const allSyms = [...new Set(THEMES.flatMap(t => t.holdings))];
+  if (statusEl) statusEl.textContent = '0/' + allSyms.length;
+  el.innerHTML = '<div class="ranking-row"><span class="ranking-name" style="color:var(--text3);font-size:9px">Scanning ' + allSyms.length + ' holdings...</span></div>';
+
+  let done = 0;
+  await Promise.all(allSyms.map(async sym => {
+    try {
+      const q = await fetchQuote1D(sym);
+      holdingPerf[sym] = { pct: q.changePercent, price: q.price };
+    } catch(e) {
+      holdingPerf[sym] = { pct: null, price: null };
+    }
+    done++;
+    if (statusEl) statusEl.textContent = done + '/' + allSyms.length;
+    renderThemeMovers();
+  }));
+
+  moversComputing = false;
+  moversLoaded = true;
+  document.getElementById('moversBtn').classList.remove('computing');
+  document.getElementById('moversBtn').classList.add('active');
+  if (statusEl) statusEl.textContent = allSyms.length + ' scanned';
+}
+
+document.getElementById('moversBtn').addEventListener('click', () => {
+  loadThemeMovers();
+});
 
 // ─── LOAD ALL ETFs ────────────────────────────────────────────────────────────
 async function loadAll() {
