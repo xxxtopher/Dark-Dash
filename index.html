@@ -87,31 +87,34 @@
   .news-header { display:flex; align-items:center; justify-content:space-between; padding:8px 28px; border-bottom:1px solid var(--border); }
   .news-label { font-size:10px; color:#a78bfa; letter-spacing:1.5px; text-transform:uppercase; }
   .news-ts { font-size:9px; color:var(--text3); letter-spacing:0.5px; }
-  .news-body { padding:14px 28px; max-height:520px; overflow-y:auto; }
+  .news-body { padding:10px 28px 14px; max-height:600px; overflow-y:auto; }
   .news-placeholder { font-size:11px; color:var(--text3); font-style:italic; }
   .news-loading { display:flex; flex-direction:column; gap:6px; }
   .news-loading-step { font-size:10px; color:var(--text2); letter-spacing:0.5px; }
   .news-loading-step.done { color:var(--green); }
   .news-loading-step.active { color:var(--accent); }
-  .news-summary { display:grid; grid-template-columns:repeat(auto-fill, minmax(340px,1fr)); gap:14px; }
-  .news-stock-card { background:var(--bg3); border:1px solid var(--border); border-radius:6px; padding:12px 14px; }
-  .news-stock-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
-  .news-stock-sym { font-size:13px; font-weight:700; color:var(--accent); letter-spacing:0.5px; }
-  .news-stock-count { font-size:9px; color:var(--text3); letter-spacing:0.5px; }
-  .news-points { list-style:none; display:flex; flex-direction:column; gap:5px; }
-  .news-point { font-size:10.5px; color:var(--text); line-height:1.5; padding-left:12px; position:relative; }
-  .news-point::before { content:'▸'; position:absolute; left:0; color:var(--accent); font-size:8px; top:2px; }
-  .news-point.filing { }
-  .news-point.filing::before { color:#ffd700; content:'⚡'; }
-  .news-source { font-size:9px; color:var(--text3); margin-top:8px; border-top:1px solid var(--border); padding-top:5px; }
-  .news-no-news { font-size:10px; color:var(--text3); font-style:italic; }
-  .news-source-links { margin-top:8px; border-top:1px solid var(--border); padding-top:6px; display:flex; flex-direction:column; gap:3px; }
-  .news-link { font-size:9.5px; color:var(--text2); text-decoration:none; line-height:1.4; display:block; }
-  .news-link:hover { color:var(--accent); text-decoration:underline; }
-  .filing-link { color:var(--gold); }
-  .filing-link:hover { color:#ffe566; }
+  /* Two-column compact news grid */
+  .news-grid { display:grid; grid-template-columns:1fr 1fr; gap:0; }
+  .news-row { display:grid; grid-template-columns:52px 1fr; align-items:start; padding:5px 8px; border-bottom:1px solid rgba(255,255,255,0.04); transition:background 0.1s; }
+  .news-row:hover { background:var(--bg3); }
+  .news-row-sym { font-size:11px; font-weight:700; color:var(--accent); letter-spacing:0.3px; padding-top:1px; }
+  .news-row-items { display:flex; flex-direction:column; gap:2px; }
+  .news-row-item { font-size:10px; color:var(--text2); line-height:1.4; display:flex; align-items:baseline; gap:4px; }
+  .news-row-item a { color:var(--text); text-decoration:none; }
+  .news-row-item a:hover { color:var(--accent); text-decoration:underline; }
+  .news-row-bullet { color:var(--accent); font-size:7px; flex-shrink:0; margin-top:2px; }
+  .news-ai-summary { font-size:10px; color:var(--text); line-height:1.45; }
+  .news-ai-summary a { color:inherit; text-decoration:none; }
+  .news-ai-summary a:hover { text-decoration:underline; opacity:0.85; }
+  .news-raw-links { display:flex; flex-wrap:wrap; gap:4px; margin-top:3px; }
+  .news-raw-link { font-size:9px; color:var(--text3); text-decoration:none; border:1px solid var(--border); border-radius:3px; padding:1px 5px; white-space:nowrap; max-width:200px; overflow:hidden; text-overflow:ellipsis; display:inline-block; }
+  .news-raw-link:hover { color:var(--accent); border-color:var(--accent); }
+  .news-no-items { font-size:9px; color:var(--text3); font-style:italic; }
+  .news-source { font-size:9px; color:var(--text3); margin-top:10px; border-top:1px solid var(--border); padding-top:6px; }
   .news-bullet-link { color:inherit; text-decoration:none; }
   .news-bullet-link:hover { text-decoration:underline; opacity:0.85; }
+  .news-link { font-size:9.5px; color:var(--text2); text-decoration:none; }
+  .filing-link { color:var(--gold); }
   .btn-breadth.active { border-color:var(--gold); color:var(--gold); background:rgba(255,215,0,0.05); }
   .btn-breadth.computing { opacity:0.6; pointer-events:none; }
 
@@ -1283,78 +1286,75 @@ Respond ONLY in JSON (no markdown fences):
 
 function renderNewsSummary(summaries, rawItems) {
   const el = document.getElementById('newsBody');
-  if (!summaries?.stocks?.length) {
-    el.innerHTML = '<div class="news-placeholder">No significant news or filings found in the last 24 hours for watchlist stocks.</div>';
+  if (!summaries?.stocks?.length && !rawItems?.length) {
+    el.innerHTML = '<div class="news-placeholder">No significant news found in the last 24 hours.</div>';
     return;
   }
 
-  // Build url lookup: sym -> { news: [{title,url}], filings: [{form,filed,url}] }
-  const rawMap = Object.fromEntries(rawItems.map(r => [r.sym, r]));
-  const summarized = new Set(summaries.stocks.map(s => s.sym));
+  const rawMap = Object.fromEntries((rawItems ?? []).map(r => [r.sym, r]));
+  const aiMap  = Object.fromEntries((summaries?.stocks ?? []).map(s => [s.sym, s]));
 
-  let html = '<div class="news-summary">';
+  // All symbols that have any content
+  const allSyms = [...new Set([
+    ...(summaries?.stocks ?? []).map(s => s.sym),
+    ...(rawItems ?? []).filter(r => r.news.length).map(r => r.sym)
+  ])];
 
-  for (const s of summaries.stocks) {
-    const raw = rawMap[s.sym] ?? { news:[], filings:[] };
-    const totalItems = raw.news.length + raw.filings.length;
+  if (!allSyms.length) {
+    el.innerHTML = '<div class="news-placeholder">No significant news found in the last 24 hours.</div>';
+    return;
+  }
 
-    // Match each AI bullet to a source URL by finding the closest news title
-    const usedNews = new Set();
-    const pointsHtml = s.points.map(point => {
-      // Try to find a matching news item for this bullet
-      const match = raw.news.find((n,i) => !usedNews.has(i) && n.title);
-      const idx = match ? raw.news.indexOf(match) : -1;
-      if (idx >= 0) usedNews.add(idx);
+  const makeRow = (sym) => {
+    const ai  = aiMap[sym];
+    const raw = rawMap[sym] ?? { news:[], filings:[] };
 
-      const url = match?.url ?? null;
-      const isFiling = s.hasFiling && raw.filings.length > 0 && !match;
-      const filingUrl = isFiling ? raw.filings[0]?.url : null;
-      const linkUrl = url ?? filingUrl;
+    // AI summary points as condensed text — join into one line, first point only for compactness
+    let summaryHtml = '';
+    if (ai?.points?.length) {
+      const firstPoint = ai.points[0];
+      // Link to first news URL if available
+      const firstUrl = raw.news[0]?.url ?? null;
+      summaryHtml = firstUrl
+        ? `<span class="news-ai-summary"><a href="${firstUrl}" target="_blank">${firstPoint}</a></span>`
+        : `<span class="news-ai-summary">${firstPoint}</span>`;
+      // Add remaining points as smaller text
+      if (ai.points.length > 1) {
+        summaryHtml += ai.points.slice(1).map((p, i) => {
+          const url = raw.news[i+1]?.url ?? null;
+          return url
+            ? `<span class="news-ai-summary"><a href="${url}" target="_blank">${p}</a></span>`
+            : `<span class="news-ai-summary">${p}</span>`;
+        }).join('');
+      }
+    } else {
+      // No AI summary — show raw headlines directly
+      summaryHtml = raw.news.map(n =>
+        `<span class="news-ai-summary"><a href="${n.url}" target="_blank">${n.title.length>90?n.title.slice(0,90)+'…':n.title}</a></span>`
+      ).join('');
+    }
 
-      const inner = linkUrl
-        ? `<a href="${linkUrl}" target="_blank" class="news-bullet-link">${point} ↗</a>`
-        : point;
-      return `<li class="news-point${isFiling?' filing':''}">${inner}</li>`;
-    }).join('');
+    // Raw source links (compact chips)
+    const sourceLinks = [
+      ...raw.filings.map(f => `<a href="${f.url}" target="_blank" class="news-raw-link" style="color:var(--gold)">⚡${f.form}</a>`),
+      ...raw.news.map(n => `<a href="${n.url}" target="_blank" class="news-raw-link">${n.title.length>30?n.title.slice(0,30)+'…':n.title}</a>`)
+    ].join('');
 
-    // Show raw filing links separately since they're different from news bullets
-    const filingLinksHtml = raw.filings.map(f =>
-      `<a href="${f.url}" target="_blank" class="news-link filing-link">⚡ SEC ${f.form} · ${f.filed}</a>`
-    ).join('');
-
-    // Remaining news links not matched to bullets
-    const extraNewsHtml = raw.news
-      .filter((_,i) => !usedNews.has(i))
-      .map(n => `<a href="${n.url}" target="_blank" class="news-link">↗ ${n.title.length>70?n.title.slice(0,70)+'…':n.title}</a>`)
-      .join('');
-
-    const hasExtra = filingLinksHtml || extraNewsHtml;
-
-    html += `<div class="news-stock-card">
-      <div class="news-stock-header">
-        <span class="news-stock-sym">${s.sym}</span>
-        <span class="news-stock-count">${totalItems} source${totalItems!==1?'s':''}</span>
+    return `<div class="news-row">
+      <div class="news-row-sym">${sym}</div>
+      <div class="news-row-items">
+        <div class="news-row-item">${summaryHtml}</div>
+        ${sourceLinks ? `<div class="news-raw-links">${sourceLinks}</div>` : ''}
       </div>
-      <ul class="news-points">${pointsHtml}</ul>
-      ${hasExtra ? `<div class="news-source-links">${filingLinksHtml}${extraNewsHtml}</div>` : ''}
     </div>`;
-  }
+  };
 
-  // Stocks with raw items but no AI summary — show links directly
-  for (const r of rawItems) {
-    if (summarized.has(r.sym)) continue;
-    if (!r.news.length && !r.filings.length) continue;
-    const items = [
-      ...r.filings.map(f => `<li class="news-point filing"><a href="${f.url}" target="_blank" class="news-bullet-link">⚡ SEC ${f.form} filing · ${f.filed} ↗</a></li>`),
-      ...r.news.map(n => `<li class="news-point"><a href="${n.url}" target="_blank" class="news-bullet-link">${n.title} ↗</a></li>`),
-    ];
-    html += `<div class="news-stock-card">
-      <div class="news-stock-header"><span class="news-stock-sym">${r.sym}</span><span class="news-stock-count">${r.news.length+r.filings.length} sources</span></div>
-      <ul class="news-points">${items.join('')}</ul>
-    </div>`;
-  }
+  // Split into two columns
+  const mid = Math.ceil(allSyms.length / 2);
+  const col1 = allSyms.slice(0, mid).map(makeRow).join('');
+  const col2 = allSyms.slice(mid).map(makeRow).join('');
 
-  html += '</div>';
+  let html = `<div class="news-grid"><div>${col1}</div><div>${col2}</div></div>`;
   html += `<div class="news-source">Sources: Yahoo Finance · Finviz · Summarized by Claude AI · ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>`;
   el.innerHTML = html;
 }
