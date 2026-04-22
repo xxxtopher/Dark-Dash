@@ -93,26 +93,23 @@
   .news-loading-step { font-size:10px; color:var(--text2); letter-spacing:0.5px; }
   .news-loading-step.done { color:var(--green); }
   .news-loading-step.active { color:var(--accent); }
-  /* Two-column compact news grid */
-  .news-grid { display:grid; grid-template-columns:1fr 1fr; gap:0; }
-  .news-row { display:grid; grid-template-columns:52px 1fr; align-items:start; padding:5px 8px; border-bottom:1px solid rgba(255,255,255,0.04); transition:background 0.1s; }
-  .news-row:hover { background:var(--bg3); }
-  .news-row-sym { font-size:11px; font-weight:700; color:var(--accent); letter-spacing:0.3px; padding-top:1px; }
-  .news-row-items { display:flex; flex-direction:column; gap:2px; }
-  .news-row-item { font-size:10px; color:var(--text2); line-height:1.4; display:flex; align-items:baseline; gap:4px; }
-  .news-row-item a { color:var(--text); text-decoration:none; }
-  .news-row-item a:hover { color:var(--accent); text-decoration:underline; }
-  .news-row-bullet { color:var(--accent); font-size:7px; flex-shrink:0; margin-top:2px; }
-  .news-ai-summary { font-size:10px; color:var(--text); line-height:1.45; }
-  .news-ai-summary a { color:inherit; text-decoration:none; }
-  .news-ai-summary a:hover { text-decoration:underline; opacity:0.85; }
-  .news-raw-links { display:flex; flex-wrap:wrap; gap:4px; margin-top:3px; }
-  .news-raw-link { font-size:9px; color:var(--text3); text-decoration:none; border:1px solid var(--border); border-radius:3px; padding:1px 5px; white-space:nowrap; max-width:200px; overflow:hidden; text-overflow:ellipsis; display:inline-block; }
-  .news-raw-link:hover { color:var(--accent); border-color:var(--accent); }
-  .news-no-items { font-size:9px; color:var(--text3); font-style:italic; }
+  /* Two-column compact news grid — one headline per row like Finviz */
+  .news-grid { display:grid; grid-template-columns:1fr 1fr; gap:0; border-top:1px solid var(--border); }
+  .news-col { border-right:1px solid var(--border); }
+  .news-col:last-child { border-right:none; }
+  /* Ticker group header */
+  .news-sym-header { display:flex; align-items:center; gap:8px; padding:4px 10px 2px; background:var(--bg3); border-bottom:1px solid var(--border); position:sticky; top:0; z-index:2; }
+  .news-sym-label { font-size:11px; font-weight:700; color:var(--accent); letter-spacing:0.5px; }
+  .news-sym-count { font-size:8.5px; color:var(--text3); }
+  /* One headline per row */
+  .news-item-row { display:flex; align-items:baseline; gap:6px; padding:4px 10px; border-bottom:1px solid rgba(255,255,255,0.04); transition:background 0.1s; }
+  .news-item-row:hover { background:rgba(255,255,255,0.03); }
+  .news-item-bullet { color:var(--accent); font-size:7px; flex-shrink:0; margin-top:3px; }
+  .news-item-link { font-size:10.5px; color:var(--text); text-decoration:none; line-height:1.45; }
+  .news-item-link:hover { color:var(--accent); text-decoration:underline; }
+  .news-item-text { font-size:10.5px; color:var(--text2); line-height:1.45; }
   .news-source { font-size:9px; color:var(--text3); margin-top:10px; border-top:1px solid var(--border); padding-top:6px; }
   .news-bullet-link { color:inherit; text-decoration:none; }
-  .news-bullet-link:hover { text-decoration:underline; opacity:0.85; }
   .news-link { font-size:9.5px; color:var(--text2); text-decoration:none; }
   .filing-link { color:var(--gold); }
   .btn-breadth.active { border-color:var(--gold); color:var(--gold); background:rgba(255,215,0,0.05); }
@@ -1286,15 +1283,11 @@ Respond ONLY in JSON (no markdown fences):
 
 function renderNewsSummary(summaries, rawItems) {
   const el = document.getElementById('newsBody');
-  if (!summaries?.stocks?.length && !rawItems?.length) {
-    el.innerHTML = '<div class="news-placeholder">No significant news found in the last 24 hours.</div>';
-    return;
-  }
 
   const rawMap = Object.fromEntries((rawItems ?? []).map(r => [r.sym, r]));
   const aiMap  = Object.fromEntries((summaries?.stocks ?? []).map(s => [s.sym, s]));
 
-  // All symbols that have any content
+  // All symbols with any content
   const allSyms = [...new Set([
     ...(summaries?.stocks ?? []).map(s => s.sym),
     ...(rawItems ?? []).filter(r => r.news.length).map(r => r.sym)
@@ -1305,56 +1298,55 @@ function renderNewsSummary(summaries, rawItems) {
     return;
   }
 
-  const makeRow = (sym) => {
+  // Build one block per symbol — each news item on its own row
+  const makeBlock = (sym) => {
     const ai  = aiMap[sym];
     const raw = rawMap[sym] ?? { news:[], filings:[] };
 
-    // AI summary points as condensed text — join into one line, first point only for compactness
-    let summaryHtml = '';
+    // Collect all items: AI bullet points (linked to raw URLs) + any extra raw items
+    const items = [];
+
     if (ai?.points?.length) {
-      const firstPoint = ai.points[0];
-      // Link to first news URL if available
-      const firstUrl = raw.news[0]?.url ?? null;
-      summaryHtml = firstUrl
-        ? `<span class="news-ai-summary"><a href="${firstUrl}" target="_blank">${firstPoint}</a></span>`
-        : `<span class="news-ai-summary">${firstPoint}</span>`;
-      // Add remaining points as smaller text
-      if (ai.points.length > 1) {
-        summaryHtml += ai.points.slice(1).map((p, i) => {
-          const url = raw.news[i+1]?.url ?? null;
-          return url
-            ? `<span class="news-ai-summary"><a href="${url}" target="_blank">${p}</a></span>`
-            : `<span class="news-ai-summary">${p}</span>`;
-        }).join('');
-      }
+      // Match AI bullet to raw news URL
+      ai.points.forEach((point, i) => {
+        const url = raw.news[i]?.url ?? null;
+        items.push({ text: point, url });
+      });
     } else {
-      // No AI summary — show raw headlines directly
-      summaryHtml = raw.news.map(n =>
-        `<span class="news-ai-summary"><a href="${n.url}" target="_blank">${n.title.length>90?n.title.slice(0,90)+'…':n.title}</a></span>`
-      ).join('');
+      // No AI — use raw headlines directly
+      raw.news.forEach(n => items.push({ text: n.title, url: n.url }));
     }
 
-    // Raw source links (compact chips)
-    const sourceLinks = [
-      ...raw.filings.map(f => `<a href="${f.url}" target="_blank" class="news-raw-link" style="color:var(--gold)">⚡${f.form}</a>`),
-      ...raw.news.map(n => `<a href="${n.url}" target="_blank" class="news-raw-link">${n.title.length>30?n.title.slice(0,30)+'…':n.title}</a>`)
-    ].join('');
+    // Add filings as items
+    raw.filings.forEach(f => items.push({ text: `⚡ SEC ${f.form} · ${f.filed}`, url: f.url, isFiling: true }));
 
-    return `<div class="news-row">
-      <div class="news-row-sym">${sym}</div>
-      <div class="news-row-items">
-        <div class="news-row-item">${summaryHtml}</div>
-        ${sourceLinks ? `<div class="news-raw-links">${sourceLinks}</div>` : ''}
-      </div>
-    </div>`;
+    if (!items.length) return '';
+
+    const rows = items.map(item => {
+      const textEl = item.url
+        ? `<a href="${item.url}" target="_blank" class="news-item-link${item.isFiling ? '" style="color:var(--gold)' : ''}">${item.text}</a>`
+        : `<span class="news-item-text">${item.text}</span>`;
+      return `<div class="news-item-row">
+        <span class="news-item-bullet">${item.isFiling ? '⚡' : '▸'}</span>
+        ${textEl}
+      </div>`;
+    }).join('');
+
+    return `<div class="news-sym-header">
+      <span class="news-sym-label">${sym}</span>
+      <span class="news-sym-count">${items.length} item${items.length !== 1 ? 's' : ''}</span>
+    </div>${rows}`;
   };
 
   // Split into two columns
-  const mid = Math.ceil(allSyms.length / 2);
-  const col1 = allSyms.slice(0, mid).map(makeRow).join('');
-  const col2 = allSyms.slice(mid).map(makeRow).join('');
+  const mid  = Math.ceil(allSyms.length / 2);
+  const col1 = allSyms.slice(0, mid).map(makeBlock).filter(Boolean).join('');
+  const col2 = allSyms.slice(mid).map(makeBlock).filter(Boolean).join('');
 
-  let html = `<div class="news-grid"><div>${col1}</div><div>${col2}</div></div>`;
+  let html = `<div class="news-grid">
+    <div class="news-col">${col1}</div>
+    <div class="news-col">${col2}</div>
+  </div>`;
   html += `<div class="news-source">Sources: Yahoo Finance · Finviz · Summarized by Claude AI · ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>`;
   el.innerHTML = html;
 }
