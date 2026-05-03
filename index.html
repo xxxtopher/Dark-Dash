@@ -402,7 +402,7 @@
 
 <div class="status-bar">
   <div class="status-left">
-    <div class="status-item">ETFs loaded <span id="statusLoaded">0</span>/28</div>
+    <div class="status-item">ETFs loaded <span id="statusLoaded">0</span>/31</div>
     <div class="status-item">SOURCE <span>Yahoo Finance · Direct</span></div>
   </div>
   <div>DATA MAY BE DELAYED 15–20 MIN</div>
@@ -440,6 +440,9 @@ const THEMES = [
   { id:'nonbank',    name:'NON-BANK FINANCIALS',  etf:'KBWP', color:'#b39ddb', category:'FINANCIALS',         holdings:['V','MA','PYPL','SQ','COIN','HOOD','SOFI','AFRM','UPST','LC','OMF','ALLY','COF','DFS','SYF','CACC'] },
   { id:'travellog',  name:'TRAVEL & LOGISTICS',   etf:'JETS', color:'#4dd0e1', category:'CONSUMER',            holdings:['DAL','UAL','AAL','LUV','JBLU','ALK','UBER','LYFT','FDX','UPS','XPO','SBLK'] },
   { id:'digitalent', name:'DIGITAL ENTERTAINMENT',etf:'HERO', color:'#f06292', category:'TECHNOLOGY',          holdings:['MSFT','SONY','TTWO','EA','RBLX','U','PLTK','NFLX','DIS','SPOT','MTCH','BMBL'] },
+  { id:'rareearth2', name:'RARE EARTH METALS',    etf:'REMX', color:'#aed581', category:'ENERGY & RESOURCES',  holdings:['MP','ALB','LAC','SGML','NOVN','PLAG'] },
+  { id:'techvgt',    name:'INFO TECHNOLOGY',      etf:'VGT',  color:'#4fc3f7', category:'TECHNOLOGY',          holdings:['AAPL','MSFT','NVDA','AVGO','ORCL','AMD','CSCO','AMAT','TXN','QCOM'] },
+  { id:'utilities',  name:'UTILITIES',            etf:'POWR', color:'#fff9c4', category:'ENERGY & RESOURCES',  holdings:['NEE','SO','DUK','AEP','SRE','PCG','EXC','XEL','WEC','ETR'] },
 ];
 
 // ─── FETCH ────────────────────────────────────────────────────────────────────
@@ -898,6 +901,7 @@ const WATCHLIST = [
   { group:'AI ELECTRICITY',     color:'#a5d6a7', tickers:['VICR','FLNC','BE','EOSE','MPWR','NRGV','FCEL','FPS','PLUG','ETN','NXT','BLDP'] },
   { group:'URANIUM & RARE EARTH', color:'#ff9800', tickers:['UUUU','UEC','USAR','MP','LEU','UAMY','NB','BWXT','CRML'] },
   { group:'SPACE',              color:'#b388ff', tickers:['ASTS','PL','RDW','VELO','DXYZ','RKLB','LUNR','ATI','GSAT','IRDM','ELMT','BKSY'] },
+  { group:'AI INFRASTRUCTURE',  color:'#7c4dff', tickers:['NVT','MOD','CRDO','ALAB','ANET','VRT','POWI','NVTS','STRL','CEVA','VSH'] },
   { group:'DRONES & DEFENSE',   color:'#ef9a9a', tickers:['ONDS','RCAT','KTOS','AVAV','UMAC','LASR','LPTH','OUST','FEIM','DPRO','SWMR','AVEX'] },
 ];
 const wlData = {};
