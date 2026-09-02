@@ -813,104 +813,81 @@ async function loadMarketOverview() {
 
 // ─── SECTOR TRENDS ────────────────────────────────────────────────────────────
 // Data sourced from Trading Logic (trading-logic.com/en) breadth table.
-// Columns: Date, SPX, COM, CND, CNS, ENE, FIN, HLT, IND, MAT, REI, TEC, UTL, Breadth
-// Each value = % of stocks in sector above 20-day MA (0-100)
+// Columns: Date, COM, CND, CNS, ENE, FIN, HLT, IND, MAT, REI, TEC, UTL, Breadth(÷11)
 
 const SECTOR_COLS = [
-  { key:'TEC', name:'Technology',    color:'#00b4ff' },
-  { key:'HLT', name:'Healthcare',    color:'#26c6da' },
-  { key:'FIN', name:'Financials',    color:'#90caf9' },
-  { key:'IND', name:'Industrials',   color:'#ffb74d' },
-  { key:'CND', name:'Cons Disc',     color:'#f06292' },
-  { key:'CNS', name:'Cons Staples',  color:'#a5d6a7' },
-  { key:'ENE', name:'Energy',        color:'#ff8f00' },
-  { key:'MAT', name:'Materials',     color:'#8bc34a' },
-  { key:'COM', name:'Comm Svcs',     color:'#ce93d8' },
-  { key:'REI', name:'Real Estate',   color:'#fff176' },
-  { key:'UTL', name:'Utilities',     color:'#80cbc4' },
-  { key:'Breadth', name:'Total Breadth (÷11)', color:'#ffffff' },
+  { key:'TEC', name:'Technology',   color:'#00b4ff' },
+  { key:'HLT', name:'Healthcare',   color:'#26c6da' },
+  { key:'FIN', name:'Financials',   color:'#90caf9' },
+  { key:'IND', name:'Industrials',  color:'#ffb74d' },
+  { key:'CND', name:'Cons Disc',    color:'#f06292' },
+  { key:'CNS', name:'Cons Staples', color:'#a5d6a7' },
+  { key:'ENE', name:'Energy',       color:'#ff8f00' },
+  { key:'MAT', name:'Materials',    color:'#8bc34a' },
+  { key:'COM', name:'Comm Svcs',    color:'#ce93d8' },
+  { key:'REI', name:'Real Estate',  color:'#fff176' },
+  { key:'UTL', name:'Utilities',    color:'#80cbc4' },
+  { key:'BRD', name:'Total Breadth',color:'#ffffff' },
 ];
 
-// Parse the raw Trading Logic breadth table text into structured data
-function parseTradingLogicData(raw) {
-  const cols = ['Date','SPX','COM','CND','CNS','ENE','FIN','HLT','IND','MAT','REI','TEC','UTL','Breadth'];
-  const rows = [];
-  // Match date-prefixed lines: YYYY-MM-DD followed by numbers
-  const re = /(\d{4}-\d{2}-\d{2})((?:\d+){12,13})/g;
-  let m;
-  while ((m = re.exec(raw)) !== null) {
-    const date = m[1];
-    // Split numbers — they're packed together without spaces
-    // Each column is a 1-3 digit number, Breadth is up to 4 digits
-    const nums = m[2].match(/\d{1,4}/g) ?? [];
-    if (nums.length >= 13) {
-      const row = { Date: date };
-      cols.slice(1).forEach((c, i) => { row[c] = parseInt(nums[i] ?? 0); });
-      // Normalize breadth to 0-100 scale (it's 0-1100)
-      row['Breadth'] = Math.round((row['Breadth'] ?? 0) / 11);
-      // Skip weekends/zeros
-      const totalSector = (row['COM']||0)+(row['TEC']||0)+(row['FIN']||0);
-      if (totalSector > 0) rows.push(row);
-    }
-  }
-  return rows.slice(0, 60).reverse(); // last 60 trading days, chronological
-}
-
-const TRADING_LOGIC_RAW = `2026-08-31416821471004058253821531048
-2026-08-28457329537152612846315113508
-2026-08-27465927478144683350316016516
-2026-08-26557344728153783969485123631
-2026-08-25527744678153802958525116608
-2026-08-24547750818656763362634016640
-2026-08-21527344619051783362474913601
-2026-08-20477333568639713250404729556
-2026-08-19567760699552834250305023631
-2026-08-18547740449559814735235926586
-2026-08-17586846449560775754277419620
-2026-08-14687758679569817065338323721
-2026-08-13697771678675817262408316730
-2026-08-12657367589064866665318010690
-2026-08-11657369588167806881217410682
-2026-08-10648265608163856785247110693
-2026-08-07668271693867817077457610686
-2026-08-06647769614872757173386966659
-2026-08-05667375722977787665416910665
-2026-08-04697765786276687777528010722
-2026-08-03616867677169685962486110650
-2026-07-31555558537163665462385410584
-2026-07-30575558677168694877525016631
-2026-07-29647369897169814965904042738
-2026-07-28715977946281836573904355782
-2026-07-27654562897177646862764948711
-2026-07-24562338479071586362693377631
-2026-07-23441819319553425450482674510
-2026-07-22474521479071394750383352533
-2026-07-21515033507681583746484723549
-2026-07-20545535677683584231664629588
-2026-07-17595942677685754742764735651
-2026-07-16667354867685805654764358741
-2026-07-15546438448183684231484639584
-2026-07-14596438448692635227485368635
-2026-07-13645935588691884935485787693
-2026-07-10635540616291905731385774656
-2026-07-09605535445292924935316061606
-2026-07-08594527588179864735415381633
-2026-07-07685948675291936562594790733
-2026-07-06695948672495927665484990713
-2026-07-02706458723385907662624490736
-2026-07-01655558582481857558594481678
-2026-06-30632356613367767758624694653`;
+// Pre-parsed from trading-logic.com — [Date, COM, CND, CNS, ENE, FIN, HLT, IND, MAT, REI, TEC, UTL, Breadth/11]
+const TRENDS_DATA = [
+  {Date:'2026-06-30',COM:63,CND:23,CNS:56,ENE:33,FIN:67,HLT:77,IND:58,MAT:62,REI:46,TEC:94,UTL:53,BRD:59},
+  {Date:'2026-07-01',COM:65,CND:55,CNS:58,ENE:24,FIN:81,HLT:85,IND:75,MAT:58,REI:59,TEC:81,UTL:44,BRD:62},
+  {Date:'2026-07-02',COM:70,CND:64,CNS:58,ENE:72,FIN:85,HLT:90,IND:76,MAT:62,REI:62,TEC:90,UTL:44,BRD:67},
+  {Date:'2026-07-06',COM:69,CND:59,CNS:48,ENE:67,FIN:24,HLT:95,IND:92,MAT:76,REI:65,TEC:48,UTL:49,BRD:65},
+  {Date:'2026-07-07',COM:68,CND:59,CNS:48,ENE:24,FIN:95,HLT:92,IND:76,MAT:65,REI:48,TEC:49,UTL:90,BRD:65},
+  {Date:'2026-07-08',COM:59,CND:45,CNS:27,ENE:58,FIN:81,HLT:79,IND:86,MAT:47,REI:35,TEC:41,UTL:53,BRD:56},
+  {Date:'2026-07-09',COM:60,CND:55,CNS:35,ENE:44,FIN:52,HLT:92,IND:92,MAT:49,REI:35,TEC:31,UTL:60,BRD:58},
+  {Date:'2026-07-10',COM:52,CND:32,CNS:31,ENE:50,FIN:81,HLT:79,IND:64,MAT:38,REI:19,TEC:25,UTL:31,BRD:47},
+  {Date:'2026-07-13',COM:44,CND:18,CNS:19,ENE:31,FIN:95,HLT:53,IND:42,MAT:54,REI:64,TEC:23,UTL:74,BRD:47},
+  {Date:'2026-07-14',COM:59,CND:64,CNS:38,ENE:44,FIN:86,HLT:92,IND:63,MAT:52,REI:27,TEC:48,UTL:53,BRD:60},
+  {Date:'2026-07-15',COM:50,CND:36,CNS:60,ENE:42,FIN:29,HLT:70,IND:46,MAT:38,REI:54,TEC:71,UTL:35,BRD:48},
+  {Date:'2026-07-16',COM:66,CND:73,CNS:54,ENE:87,FIN:68,HLT:80,IND:56,MAT:54,REI:76,TEC:43,UTL:58,BRD:65},
+  {Date:'2026-07-17',COM:62,CND:55,CNS:69,ENE:53,FIN:38,HLT:67,IND:42,MAT:73,REI:69,TEC:59,UTL:62,BRD:62},
+  {Date:'2026-07-20',COM:55,CND:50,CNS:65,ENE:42,FIN:24,HLT:56,IND:37,MAT:68,REI:52,TEC:74,UTL:35,BRD:53},
+  {Date:'2026-07-21',COM:51,CND:50,CNS:33,ENE:50,FIN:76,HLT:81,IND:58,MAT:37,REI:46,TEC:48,UTL:47,BRD:52},
+  {Date:'2026-07-22',COM:47,CND:45,CNS:21,ENE:47,FIN:90,HLT:71,IND:38,MAT:38,REI:33,TEC:52,UTL:35,BRD:47},
+  {Date:'2026-07-23',COM:44,CND:18,CNS:19,ENE:31,FIN:95,HLT:53,IND:42,MAT:54,REI:48,TEC:26,UTL:74,BRD:46},
+  {Date:'2026-07-24',COM:56,CND:23,CNS:38,ENE:47,FIN:90,HLT:71,IND:58,MAT:62,REI:69,TEC:33,UTL:77,BRD:57},
+  {Date:'2026-07-27',COM:65,CND:45,CNS:62,ENE:89,FIN:71,HLT:77,IND:64,MAT:68,REI:62,TEC:76,UTL:49,BRD:66},
+  {Date:'2026-07-28',COM:71,CND:59,CNS:77,ENE:94,FIN:62,HLT:81,IND:83,MAT:65,REI:73,TEC:90,UTL:43,BRD:73},
+  {Date:'2026-07-29',COM:64,CND:73,CNS:69,ENE:89,FIN:71,HLT:69,IND:81,MAT:49,REI:65,TEC:90,UTL:40,BRD:70},
+  {Date:'2026-07-30',COM:57,CND:55,CNS:58,ENE:67,FIN:68,HLT:69,IND:48,MAT:77,REI:52,TEC:50,UTL:16,BRD:58},
+  {Date:'2026-07-31',COM:55,CND:55,CNS:58,ENE:53,FIN:71,HLT:63,IND:66,MAT:54,REI:62,TEC:38,UTL:54,BRD:57},
+  {Date:'2026-08-03',COM:61,CND:68,CNS:67,ENE:67,FIN:69,HLT:68,IND:59,MAT:62,REI:48,TEC:61,UTL:10,BRD:59},
+  {Date:'2026-08-04',COM:69,CND:77,CNS:65,ENE:78,FIN:62,HLT:76,IND:68,MAT:77,REI:75,TEC:28,UTL:10,BRD:65},
+  {Date:'2026-08-05',COM:52,CND:74,CNS:46,ENE:75,FIN:80,HLT:60,IND:78,MAT:65,REI:41,TEC:69,UTL:10,BRD:63},
+  {Date:'2026-08-06',COM:66,CND:77,CNS:56,ENE:75,FIN:71,HLT:73,IND:38,MAT:69,REI:66,TEC:59,UTL:16,BRD:63},
+  {Date:'2026-08-07',COM:68,CND:59,CNS:48,ENE:67,FIN:24,HLT:95,IND:92,MAT:76,REI:65,TEC:48,UTL:49,BRD:61},
+  {Date:'2026-08-10',COM:47,CND:33,CNS:56,ENE:83,FIN:63,HLT:85,IND:67,MAT:85,REI:24,TEC:71,UTL:10,BRD:60},
+  {Date:'2026-08-11',COM:65,CND:73,CNS:58,ENE:81,FIN:67,HLT:80,IND:68,MAT:81,REI:21,TEC:74,UTL:10,BRD:64},
+  {Date:'2026-08-12',COM:65,CND:73,CNS:67,ENE:59,FIN:64,HLT:86,IND:65,MAT:65,REI:31,TEC:80,UTL:10,BRD:65},
+  {Date:'2026-08-13',COM:69,CND:77,CNS:71,ENE:68,FIN:75,HLT:81,IND:72,MAT:62,REI:40,TEC:83,UTL:16,BRD:70},
+  {Date:'2026-08-14',COM:68,CND:77,CNS:58,ENE:67,FIN:95,HLT:69,IND:81,MAT:70,REI:65,TEC:33,UTL:83,BRD:70},
+  {Date:'2026-08-17',COM:58,CND:68,CNS:46,ENE:44,FIN:95,HLT:60,IND:77,MAT:57,REI:54,TEC:27,UTL:74,BRD:60},
+  {Date:'2026-08-18',COM:54,CND:77,CNS:40,ENE:44,FIN:95,HLT:59,IND:81,MAT:47,REI:35,TEC:23,UTL:59,BRD:57},
+  {Date:'2026-08-19',COM:56,CND:77,CNS:60,ENE:69,FIN:95,HLT:52,IND:83,MAT:42,REI:50,TEC:30,UTL:50,BRD:62},
+  {Date:'2026-08-20',COM:47,CND:73,CNS:33,ENE:56,FIN:86,HLT:39,IND:71,MAT:32,REI:50,TEC:40,UTL:47,BRD:52},
+  {Date:'2026-08-21',COM:52,CND:73,CNS:44,ENE:61,FIN:90,HLT:51,IND:78,MAT:33,REI:62,TEC:47,UTL:49,BRD:58},
+  {Date:'2026-08-24',COM:54,CND:77,CNS:50,ENE:81,FIN:86,HLT:56,IND:76,MAT:33,REI:62,TEC:63,UTL:40,BRD:62},
+  {Date:'2026-08-25',COM:52,CND:77,CNS:44,ENE:67,FIN:81,HLT:53,IND:80,MAT:29,REI:58,TEC:52,UTL:51,BRD:58},
+  {Date:'2026-08-26',COM:55,CND:73,CNS:44,ENE:72,FIN:81,HLT:53,IND:78,MAT:39,REI:69,TEC:48,UTL:51,BRD:60},
+  {Date:'2026-08-27',COM:46,CND:59,CNS:27,ENE:47,FIN:81,HLT:44,IND:68,MAT:33,REI:50,TEC:31,UTL:60,BRD:49},
+  {Date:'2026-08-28',COM:45,CND:73,CNS:29,ENE:53,FIN:71,HLT:52,IND:61,MAT:28,REI:46,TEC:31,UTL:51,BRD:49},
+  {Date:'2026-08-31',COM:41,CND:68,CNS:21,ENE:47,FIN:100,HLT:40,IND:58,MAT:25,REI:38,TEC:21,UTL:53,BRD:44},
+];
 
 let trendsVisible = false;
-let trendsData = null;
 const hiddenSectors = new Set();
 
 function drawTrendsChart() {
   const canvas = document.getElementById('trendsCanvas');
   const wrap   = canvas.parentElement;
-  if (!canvas || !trendsData?.length) return;
+  if (!canvas || !TRENDS_DATA.length) return;
 
-  const W = wrap.clientWidth, H = wrap.clientHeight || 220;
+  const W = wrap.clientWidth || 800;
+  const H = 220;
   const dpr = devicePixelRatio || 1;
   canvas.width  = W * dpr; canvas.height = H * dpr;
   canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
@@ -920,41 +897,40 @@ function drawTrendsChart() {
   const PAD = { top:8, right:10, bottom:24, left:32 };
   const cW = W - PAD.left - PAD.right;
   const cH = H - PAD.top  - PAD.bottom;
-  const N  = trendsData.length;
-
+  const N  = TRENDS_DATA.length;
   const toX = i => PAD.left + (i / (N-1)) * cW;
   const toY = v => PAD.top  + (1 - v/100) * cH;
 
-  // Grid lines
-  ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
-  [0, 25, 50, 75, 100].forEach(v => {
+  // Background grid
+  ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.lineWidth=1;
+  [0,25,50,75,100].forEach(v => {
     ctx.beginPath(); ctx.moveTo(PAD.left, toY(v)); ctx.lineTo(PAD.left+cW, toY(v)); ctx.stroke();
     ctx.fillStyle='rgba(180,200,220,0.5)'; ctx.font='8px monospace'; ctx.textAlign='right';
     ctx.fillText(v+'%', PAD.left-4, toY(v)+3);
   });
 
-  // 50% reference line
-  ctx.strokeStyle='rgba(255,255,255,0.15)'; ctx.setLineDash([4,4]); ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(PAD.left, toY(50)); ctx.lineTo(PAD.left+cW, toY(50)); ctx.stroke();
+  // 50% dashed reference
+  ctx.setLineDash([4,4]); ctx.strokeStyle='rgba(255,255,255,0.15)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(PAD.left,toY(50)); ctx.lineTo(PAD.left+cW,toY(50)); ctx.stroke();
   ctx.setLineDash([]);
 
-  // Date labels (every ~10 points)
+  // Date labels every 10 points
   ctx.fillStyle='rgba(180,200,220,0.5)'; ctx.font='8px monospace'; ctx.textAlign='center';
-  trendsData.forEach((d, i) => {
-    if (i % 10 === 0 || i === N-1) {
-      ctx.fillText(d.Date.slice(5), toX(i), H - 4);
-    }
+  TRENDS_DATA.forEach((d,i) => {
+    if (i % 10 === 0 || i === N-1) ctx.fillText(d.Date.slice(5), toX(i), H-4);
   });
 
-  // Lines
+  // Draw each sector line
   SECTOR_COLS.forEach(col => {
     if (hiddenSectors.has(col.key)) return;
-    const pts = trendsData.map((d, i) => ({ x: toX(i), y: toY(d[col.key] ?? 0) }));
     ctx.beginPath();
-    ctx.strokeStyle = col.key === 'Breadth' ? 'rgba(255,255,255,0.9)' : col.color;
-    ctx.lineWidth   = col.key === 'Breadth' ? 2.5 : 1.5;
-    ctx.globalAlpha = col.key === 'Breadth' ? 1 : 0.8;
-    pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    ctx.strokeStyle = col.color;
+    ctx.lineWidth   = col.key==='BRD' ? 2.5 : 1.5;
+    ctx.globalAlpha = col.key==='BRD' ? 1.0 : 0.75;
+    TRENDS_DATA.forEach((d,i) => {
+      const x = toX(i), y = toY(d[col.key] ?? 0);
+      i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    });
     ctx.stroke();
   });
   ctx.globalAlpha = 1;
@@ -964,54 +940,41 @@ function setupTrendsInteraction() {
   const canvas = document.getElementById('trendsCanvas');
   const tip    = document.getElementById('trendsTip');
   if (!canvas) return;
-
   canvas.addEventListener('mousemove', e => {
     const rect = canvas.getBoundingClientRect();
     const mx   = e.clientX - rect.left;
-    const N    = trendsData?.length ?? 0;
-    if (!N) return;
-    const PAD_L = 32, cW = rect.width - PAD_L - 10;
-    const idx   = Math.round((mx - PAD_L) / cW * (N-1));
-    if (idx < 0 || idx >= N) { tip.style.display='none'; return; }
-    const d = trendsData[idx];
-    const lines = SECTOR_COLS.filter(c => !hiddenSectors.has(c.key))
-      .map(c => `<span style="color:${c.color}">■</span> ${c.name}: ${d[c.key]??0}%`)
-      .join('<br>');
+    const PAD_L=32, cW=rect.width-PAD_L-10, N=TRENDS_DATA.length;
+    const idx  = Math.max(0, Math.min(N-1, Math.round((mx-PAD_L)/cW*(N-1))));
+    const d    = TRENDS_DATA[idx];
+    const lines = SECTOR_COLS.filter(c=>!hiddenSectors.has(c.key))
+      .map(c=>`<span style="color:${c.color}">■</span> ${c.name}: ${d[c.key]??0}%`).join('<br>');
     tip.innerHTML = `<strong>${d.Date}</strong><br>${lines}`;
-    tip.style.display = 'block';
-    tip.style.left = Math.min(mx + 12, rect.width - 200) + 'px';
-    tip.style.top  = '8px';
+    tip.style.display='block';
+    tip.style.left=Math.min(mx+12, rect.width-220)+'px';
+    tip.style.top='8px';
   });
-  canvas.addEventListener('mouseleave', () => { tip.style.display='none'; });
+  canvas.addEventListener('mouseleave', ()=>{ tip.style.display='none'; });
 }
 
 function renderTrendsLegend() {
-  const el = document.getElementById('trendsLegend');
-  el.innerHTML = SECTOR_COLS.map(col =>
+  document.getElementById('trendsLegend').innerHTML = SECTOR_COLS.map(col=>
     `<div class="trends-legend-item${hiddenSectors.has(col.key)?' hidden':''}" onclick="toggleSector('${col.key}')">
       <div class="trends-legend-dot" style="background:${col.color}"></div>
       <span class="trends-legend-name">${col.name}</span>
-    </div>`
-  ).join('');
+    </div>`).join('');
 }
 
 function toggleSector(key) {
   hiddenSectors.has(key) ? hiddenSectors.delete(key) : hiddenSectors.add(key);
-  renderTrendsLegend();
-  drawTrendsChart();
+  renderTrendsLegend(); drawTrendsChart();
 }
+window.toggleSector = toggleSector;
 
 function loadTrends() {
-  if (!trendsData) {
-    trendsData = parseTradingLogicData(TRADING_LOGIC_RAW);
-  }
   renderTrendsLegend();
-  requestAnimationFrame(() => {
-    drawTrendsChart();
-    setupTrendsInteraction();
-  });
+  requestAnimationFrame(() => { drawTrendsChart(); setupTrendsInteraction(); });
   document.getElementById('trendsTs').textContent =
-    trendsData.length + ' trading days · source: trading-logic.com';
+    TRENDS_DATA.length + ' trading days · source: trading-logic.com';
 }
 
 document.getElementById('trendsBtn').addEventListener('click', () => {
@@ -1020,8 +983,6 @@ document.getElementById('trendsBtn').addEventListener('click', () => {
   document.getElementById('trendsBtn').classList.toggle('active', trendsVisible);
   if (trendsVisible) loadTrends();
 });
-
-window.toggleSector = toggleSector;
 
 // ─── BREADTH (on-demand) ──────────────────────────────────────────────────────
 const breadthState = {up:null,down:null,above20:null,above50:null,above200:null,highs:null,lows:null,lastComputed:null};
