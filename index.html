@@ -178,8 +178,20 @@
   .breadth-label { font-size:9px; color:var(--text3); letter-spacing:2px; text-transform:uppercase; }
   .breadth-ts { font-size:8px; color:var(--text3); }
   .breadth-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:8px; }
-  .breadth-card { background:var(--bg3); border:1px solid var(--border); border-radius:6px; padding:8px 10px; }
+  .breadth-card { background:var(--bg3); border:1px solid var(--border); border-radius:6px; padding:8px 10px; cursor:pointer; transition:border-color 0.15s; }
+  .breadth-card:hover { border-color:var(--border2); }
   .breadth-card-title { font-size:8px; color:var(--text3); letter-spacing:0.8px; text-transform:uppercase; margin-bottom:6px; line-height:1.3; }
+
+  /* Breadth History Modal */
+  .bh-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:100; align-items:center; justify-content:center; }
+  .bh-overlay.visible { display:flex; }
+  .bh-modal { background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:16px 20px; width:min(700px,90vw); position:relative; }
+  .bh-title { font-size:11px; color:var(--accent); letter-spacing:1.5px; text-transform:uppercase; font-weight:600; margin-bottom:12px; }
+  .bh-canvas-wrap { width:100%; height:200px; position:relative; }
+  .bh-meta { font-size:9px; color:var(--text3); margin-top:8px; display:flex; justify-content:space-between; }
+  .bh-close { position:absolute; top:12px; right:16px; background:none; border:none; color:var(--text3); font-size:18px; cursor:pointer; line-height:1; }
+  .bh-close:hover { color:var(--text); }
+  .bh-save-status { font-size:9px; color:var(--text3); margin-top:6px; text-align:right; min-height:12px; }
   .breadth-value { font-size:17px; font-weight:700; line-height:1; letter-spacing:-0.5px; }
   .breadth-value.pos { color:var(--green); }
   .breadth-value.neg { color:var(--red); }
@@ -366,6 +378,19 @@
   <div class="trends-canvas-wrap">
     <canvas id="trendsCanvas"></canvas>
     <div class="trends-tooltip" id="trendsTip"></div>
+  </div>
+</div>
+
+<!-- Breadth History Modal -->
+<div class="bh-overlay" id="bhOverlay">
+  <div class="bh-modal">
+    <button class="bh-close" onclick="document.getElementById('bhOverlay').classList.remove('visible')">✕</button>
+    <div class="bh-title" id="bhTitle">% Above MA — Historical</div>
+    <div class="bh-canvas-wrap"><canvas id="bhCanvas"></canvas></div>
+    <div class="bh-meta">
+      <span id="bhMeta"></span>
+      <span id="bhSaveStatus"></span>
+    </div>
   </div>
 </div>
 
@@ -1172,7 +1197,170 @@ async function loadBreadth(force=false) {
   breadthComputing = false;
   document.getElementById('breadthBtn').classList.remove('computing');
   document.getElementById('breadthTimestamp').textContent =
-    'COMPUTED ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) + ' \u00b7 REFRESHES HOURLY';
+    'COMPUTED ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) + ' \u00b7 REFRESHES HOURLY · click MA cards for history';
+
+  // Save today's readings to GitHub and enable card click listeners
+  addBreadthCardListeners();
+  saveBreadthToday();
+}
+
+// ─── BREADTH HISTORY ──────────────────────────────────────────────────────────
+// Saves daily MA breadth readings to breadth-history.json in your GitHub repo.
+// Requires a GitHub Personal Access Token with repo write access.
+
+function getGithubToken() {
+  let t = localStorage.getItem('github_pat') ?? '';
+  if (!t || !t.startsWith('github_pat_') && !t.startsWith('ghp_') && !t.startsWith('gho_')) {
+    t = (prompt('Enter your GitHub Personal Access Token (ghp_... or github_pat_...):\n\nNeeded to save breadth history to your repo.\nCreate one at: github.com/Settings/Tokens (scope: repo)') ?? '').trim();
+    if (t) localStorage.setItem('github_pat', t);
+  }
+  return t || null;
+}
+
+// GitHub repo config — update these to match your repo
+const GH_OWNER = '';  // ← your GitHub username e.g. 'topherho'
+const GH_REPO  = '';  // ← your repo name e.g. 'dashboard'
+const GH_FILE  = 'breadth-history.json';
+
+async function ghReadFile() {
+  const token = getGithubToken();
+  if (!token || !GH_OWNER || !GH_REPO) return null;
+  try {
+    const res = await fetch(`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_FILE}`, {
+      headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github.v3+json' }
+    });
+    if (res.status === 404) return { rows: [], sha: null };
+    if (!res.ok) throw new Error('GH read HTTP ' + res.status);
+    const meta = await res.json();
+    const content = JSON.parse(atob(meta.content.replace(/\n/g,'')));
+    return { rows: content.rows ?? [], sha: meta.sha };
+  } catch(e) { console.warn('[gh read]', e.message); return null; }
+}
+
+async function ghWriteFile(rows, sha) {
+  const token = getGithubToken();
+  if (!token || !GH_OWNER || !GH_REPO) return false;
+  try {
+    const body = { message: 'breadth: ' + new Date().toISOString().slice(0,10),
+      content: btoa(JSON.stringify({ rows }, null, 2)),
+      ...(sha ? { sha } : {}) };
+    const res = await fetch(`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_FILE}`, {
+      method: 'PUT',
+      headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    return res.ok;
+  } catch(e) { console.warn('[gh write]', e.message); return false; }
+}
+
+async function saveBreadthToday() {
+  if (!GH_OWNER || !GH_REPO) return; // not configured
+  const { above20, above50, above200, up, down, highs, lows } = breadthState;
+  if (above20 == null) return; // not computed yet
+  const today = new Date().toISOString().slice(0,10);
+  const statusEl = document.getElementById('bhSaveStatus');
+  if (statusEl) statusEl.textContent = 'Saving to GitHub…';
+
+  const existing = await ghReadFile();
+  if (!existing) { if (statusEl) statusEl.textContent = 'GitHub not configured.'; return; }
+
+  // Avoid duplicate for same day
+  const rows = existing.rows.filter(r => r.date !== today);
+  rows.push({ date: today, ma20: above20, ma50: above50, ma200: above200,
+    adv: up, dec: down, highs, lows });
+  rows.sort((a,b) => a.date.localeCompare(b.date));
+
+  const ok = await ghWriteFile(rows, existing.sha);
+  if (statusEl) statusEl.textContent = ok
+    ? `✓ Saved ${today} to ${GH_FILE}`
+    : '✗ Save failed — check token & repo config';
+}
+
+// Draw breadth history chart in modal
+async function showBreadthHistory(metric, label, color) {
+  document.getElementById('bhTitle').textContent = label + ' — Historical Readings';
+  document.getElementById('bhMeta').textContent = 'Loading…';
+  document.getElementById('bhSaveStatus').textContent = '';
+  document.getElementById('bhOverlay').classList.add('visible');
+
+  const existing = await ghReadFile();
+  const rows = existing?.rows ?? [];
+  if (!rows.length) {
+    document.getElementById('bhMeta').textContent = 'No history yet — data saves automatically after Market Breadth runs.';
+    return;
+  }
+
+  const dates  = rows.map(r => r.date.slice(5));
+  const values = rows.map(r => r[metric] ?? 0);
+  const N = rows.length;
+
+  const canvas = document.getElementById('bhCanvas');
+  const wrap   = canvas.parentElement;
+  const W = wrap.clientWidth || 600, H = 200;
+  const dpr = devicePixelRatio || 1;
+  canvas.width = W*dpr; canvas.height = H*dpr;
+  canvas.style.width = W+'px'; canvas.style.height = H+'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const PAD = { top:8, right:10, bottom:22, left:34 };
+  const cW = W-PAD.left-PAD.right, cH = H-PAD.top-PAD.bottom;
+  const toX = i => PAD.left + (i/(N-1||1))*cW;
+  const toY = v => PAD.top  + (1-v/100)*cH;
+
+  // Grid
+  ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.lineWidth=1;
+  [0,25,50,75,100].forEach(v => {
+    ctx.beginPath(); ctx.moveTo(PAD.left,toY(v)); ctx.lineTo(PAD.left+cW,toY(v)); ctx.stroke();
+    ctx.fillStyle='rgba(180,200,220,0.5)'; ctx.font='8px monospace'; ctx.textAlign='right';
+    ctx.fillText(v+'%', PAD.left-4, toY(v)+3);
+  });
+  // 50% dashed
+  ctx.setLineDash([4,4]); ctx.strokeStyle='rgba(255,255,255,0.2)';
+  ctx.beginPath(); ctx.moveTo(PAD.left,toY(50)); ctx.lineTo(PAD.left+cW,toY(50)); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Date labels
+  ctx.fillStyle='rgba(180,200,220,0.5)'; ctx.font='8px monospace'; ctx.textAlign='center';
+  dates.forEach((d,i) => { if (N<=10||i%Math.ceil(N/8)===0||i===N-1) ctx.fillText(d, toX(i), H-4); });
+
+  // Fill gradient
+  const grad = ctx.createLinearGradient(0,PAD.top,0,PAD.top+cH);
+  grad.addColorStop(0, color+'55'); grad.addColorStop(1, color+'00');
+  ctx.beginPath();
+  values.forEach((v,i) => i===0 ? ctx.moveTo(toX(i),toY(v)) : ctx.lineTo(toX(i),toY(v)));
+  ctx.lineTo(toX(N-1),toY(0)); ctx.lineTo(toX(0),toY(0)); ctx.closePath();
+  ctx.fillStyle=grad; ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  values.forEach((v,i) => i===0 ? ctx.moveTo(toX(i),toY(v)) : ctx.lineTo(toX(i),toY(v)));
+  ctx.strokeStyle=color; ctx.lineWidth=2; ctx.stroke();
+
+  // Dots
+  values.forEach((v,i) => {
+    ctx.beginPath(); ctx.arc(toX(i),toY(v),3,0,Math.PI*2);
+    ctx.fillStyle=color; ctx.fill();
+  });
+
+  const latest = values[values.length-1];
+  document.getElementById('bhMeta').textContent =
+    `${N} readings · Latest: ${latest.toFixed(1)}% on ${rows[N-1].date} · Click card again to refresh`;
+}
+
+// Make breadth cards clickable
+function addBreadthCardListeners() {
+  // Called after renderBreadth() — delegate via grid
+  const grid = document.getElementById('breadthGrid');
+  if (!grid || grid.dataset.listenersAdded) return;
+  grid.dataset.listenersAdded = '1';
+  grid.addEventListener('click', e => {
+    const card = e.target.closest('.breadth-card');
+    if (!card) return;
+    const title = card.querySelector('.breadth-card-title')?.textContent ?? '';
+    if (title.includes('20'))  showBreadthHistory('ma20',  '% Above 20-Day MA',  '#00e676');
+    if (title.includes('50'))  showBreadthHistory('ma50',  '% Above 50-Day MA',  '#ffd700');
+    if (title.includes('200')) showBreadthHistory('ma200', '% Above 200-Day MA', '#ff6b6b');
+  });
 }
 
 document.getElementById('breadthBtn').addEventListener('click', () => {
