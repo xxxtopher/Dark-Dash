@@ -817,7 +817,7 @@ async function loadMarketOverview() {
 
 const SECTOR_COLS = [
   { key:'TEC', name:'Technology',   color:'#00b4ff' },
-  { key:'HLT', name:'Healthcare',   color:'#26c6da' },
+  { key:'HLT', name:'Healthcare',   color:'#f9a825' },
   { key:'FIN', name:'Financials',   color:'#90caf9' },
   { key:'IND', name:'Industrials',  color:'#ffb74d' },
   { key:'CND', name:'Cons Disc',    color:'#f06292' },
@@ -884,7 +884,8 @@ const hiddenSectors = new Set();
 function drawTrendsChart() {
   const canvas = document.getElementById('trendsCanvas');
   const wrap   = canvas.parentElement;
-  if (!canvas || !TRENDS_DATA.length) return;
+  const data = liveData || TRENDS_DATA;
+  if (!canvas || !data.length) return;
 
   const W = wrap.clientWidth || 800;
   const H = 220;
@@ -897,7 +898,7 @@ function drawTrendsChart() {
   const PAD = { top:8, right:10, bottom:24, left:32 };
   const cW = W - PAD.left - PAD.right;
   const cH = H - PAD.top  - PAD.bottom;
-  const N  = TRENDS_DATA.length;
+  const N  = data.length;
   const toX = i => PAD.left + (i / (N-1)) * cW;
   const toY = v => PAD.top  + (1 - v/100) * cH;
 
@@ -916,7 +917,7 @@ function drawTrendsChart() {
 
   // Date labels every 10 points
   ctx.fillStyle='rgba(180,200,220,0.5)'; ctx.font='8px monospace'; ctx.textAlign='center';
-  TRENDS_DATA.forEach((d,i) => {
+  data.forEach((d,i) => {
     if (i % 10 === 0 || i === N-1) ctx.fillText(d.Date.slice(5), toX(i), H-4);
   });
 
@@ -927,7 +928,7 @@ function drawTrendsChart() {
     ctx.strokeStyle = col.color;
     ctx.lineWidth   = col.key==='BRD' ? 2.5 : 1.5;
     ctx.globalAlpha = col.key==='BRD' ? 1.0 : 0.75;
-    TRENDS_DATA.forEach((d,i) => {
+    data.forEach((d,i) => {
       const x = toX(i), y = toY(d[col.key] ?? 0);
       i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
     });
@@ -943,9 +944,10 @@ function setupTrendsInteraction() {
   canvas.addEventListener('mousemove', e => {
     const rect = canvas.getBoundingClientRect();
     const mx   = e.clientX - rect.left;
-    const PAD_L=32, cW=rect.width-PAD_L-10, N=TRENDS_DATA.length;
+    const d_arr = liveData || TRENDS_DATA;
+    const PAD_L=32, cW=rect.width-PAD_L-10, N=d_arr.length;
     const idx  = Math.max(0, Math.min(N-1, Math.round((mx-PAD_L)/cW*(N-1))));
-    const d    = TRENDS_DATA[idx];
+    const d    = d_arr[idx];
     const lines = SECTOR_COLS.filter(c=>!hiddenSectors.has(c.key))
       .map(c=>`<span style="color:${c.color}">■</span> ${c.name}: ${d[c.key]??0}%`).join('<br>');
     tip.innerHTML = `<strong>${d.Date}</strong><br>${lines}`;
@@ -970,11 +972,95 @@ function toggleSector(key) {
 }
 window.toggleSector = toggleSector;
 
-function loadTrends() {
+// Parse Trading Logic packed number rows
+// Each row: YYYY-MM-DD + 13 numbers (SPX, COM, CND, CNS, ENE, FIN, HLT, IND, MAT, REI, TEC, UTL, BRD)
+function parseTradingLogic(html) {
+  const rows = [];
+  const re = /(\d{4}-\d{2}-\d{2})(\d{3,}?)(?=\d{4}-\d{2}-\d{2}|Breadth|$)/g;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    const date = m[1];
+    const s = m[2];
+    if (s.length < 10) continue;
+    // Parse 12 values (0-100 each) + 1 breadth (0-1100)
+    const nums = [];
+    let i = 0;
+    for (let f = 0; f < 13; f++) {
+      if (i >= s.length) break;
+      if (f < 12) {
+        for (const len of [3, 2, 1]) {
+          if (i + len <= s.length) {
+            const v = parseInt(s.slice(i, i+len));
+            if (v <= 100) { nums.push(v); i += len; break; }
+          }
+        }
+      } else {
+        nums.push(parseInt(s.slice(i)));
+      }
+    }
+    if (nums.length < 13) continue;
+    // Skip rows where all sectors are 0 or 100 (weekends/placeholders)
+    const sectors = nums.slice(1, 12);
+    const allSame = sectors.every(v => v === 0 || v === 100);
+    if (allSame && sectors[0] === sectors[1]) continue;
+    rows.push({
+      Date: date,
+      COM: nums[1], CND: nums[2], CNS: nums[3], ENE: nums[4],
+      FIN: nums[5], HLT: nums[6], IND: nums[7], MAT: nums[8],
+      REI: nums[9], TEC: nums[10], UTL: nums[11],
+      BRD: Math.round(nums[12] / 11)
+    });
+  }
+  // Sort chronological, deduplicate dates, take last 90
+  const seen = new Set();
+  return rows.filter(r => { if (seen.has(r.Date)) return false; seen.add(r.Date); return true; })
+    .sort((a,b) => a.Date.localeCompare(b.Date))
+    .slice(-90);
+}
+
+async function fetchTradingLogic() {
+  const res = await fetch(`${WORKER_URL}?url=${encodeURIComponent('https://www.trading-logic.com/en')}`,
+    { signal: AbortSignal.timeout(15000) });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return res.text();
+}
+
+let liveData = null; // populated from fetch, overrides static TRENDS_DATA
+
+async function loadTrends() {
   renderTrendsLegend();
+  const ts = document.getElementById('trendsTs');
+  ts.textContent = 'Loading live data…';
+
+  // Check localStorage cache (valid for today)
+  const today = new Date().toISOString().slice(0,10);
+  const cached = (() => { try { return JSON.parse(localStorage.getItem('tl_breadth') || '{}'); } catch { return {}; } })();
+
+  if (cached.date === today && cached.rows?.length) {
+    liveData = cached.rows;
+    ts.textContent = cached.rows.length + ' trading days · live · trading-logic.com · cached today';
+    requestAnimationFrame(() => { drawTrendsChart(); setupTrendsInteraction(); });
+    return;
+  }
+
+  // Fetch live
+  try {
+    const html = await fetchTradingLogic();
+    const rows = parseTradingLogic(html);
+    if (rows.length > 10) {
+      liveData = rows;
+      localStorage.setItem('tl_breadth', JSON.stringify({ date: today, rows }));
+      ts.textContent = rows.length + ' trading days · live · trading-logic.com · updated ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    } else {
+      throw new Error('too few rows: ' + rows.length);
+    }
+  } catch(e) {
+    console.warn('[trends fetch]', e.message);
+    liveData = null;
+    ts.textContent = TRENDS_DATA.length + ' trading days · static fallback · trading-logic.com';
+  }
+
   requestAnimationFrame(() => { drawTrendsChart(); setupTrendsInteraction(); });
-  document.getElementById('trendsTs').textContent =
-    TRENDS_DATA.length + ' trading days · source: trading-logic.com';
 }
 
 document.getElementById('trendsBtn').addEventListener('click', () => {
