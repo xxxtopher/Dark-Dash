@@ -398,7 +398,10 @@
 <div class="breadth-panel" id="breadthPanel">
   <div class="breadth-header">
     <span class="breadth-label">▸ Market Breadth — Theme Holdings (~220 stocks)</span>
-    <span class="breadth-ts" id="breadthTimestamp"></span>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span class="breadth-ts" id="bhSaveStatus" style="font-size:9px;color:var(--text3)"></span>
+      <span class="breadth-ts" id="breadthTimestamp"></span>
+    </div>
   </div>
   <div class="breadth-grid" id="breadthGrid">
     <div class="breadth-card"><div class="breadth-card-title">Advance / Decline</div><div class="breadth-value loading">···</div></div>
@@ -408,6 +411,7 @@
     <div class="breadth-card"><div class="breadth-card-title">52-Week Highs</div><div class="breadth-value loading">···</div></div>
     <div class="breadth-card"><div class="breadth-card-title">52-Week Lows</div><div class="breadth-value loading">···</div></div>
   </div>
+  <div style="padding:6px 28px;font-size:9px;color:var(--text3)">💾 Click % Above MA cards to view history · data auto-saves to GitHub after computation · <span id="ghSetupStatus"></span></div>
 </div>
 
 <!-- News Panel (hidden by default) -->
@@ -945,7 +949,9 @@ const TRENDS_DATA = [
   {Date:'2026-08-26',COM:73,CND:44,CNS:72,ENE:81,FIN:53,HLT:78,IND:39,MAT:69,REI:48,TEC:51,UTL:23,BRD:57},
   {Date:'2026-08-27',COM:59,CND:27,CNS:47,ENE:81,FIN:44,HLT:68,IND:33,MAT:50,REI:31,TEC:60,UTL:16,BRD:47},
   {Date:'2026-08-31',COM:68,CND:23,CNS:47,ENE:100,FIN:40,HLT:58,IND:24,MAT:42,REI:21,TEC:53,UTL:10,BRD:44},
-  {Date:'2026-09-01',COM:59,CND:17,CNS:44,ENE:100,FIN:23,HLT:56,IND:16,MAT:38,REI:24,TEC:41,UTL:16,BRD:39},
+  {Date:'2026-09-01',COM:59,CND:17,CNS:44,ENE:100,FIN:23,HLT:56,IND:16,MAT:42,REI:24,TEC:43,UTL:16,BRD:40},
+  {Date:'2026-09-02',COM:73,CND:29,CNS:47,ENE:100,FIN:28,HLT:73,IND:14,MAT:54,REI:24,TEC:37,UTL:19,BRD:45},
+  {Date:'2026-09-03',COM:68,CND:29,CNS:42,ENE:100,FIN:65,HLT:69,IND:14,MAT:42,REI:24,TEC:49,UTL:35,BRD:49},
 ];
 
 let trendsVisible = false;
@@ -1042,49 +1048,59 @@ function toggleSector(key) {
 }
 window.toggleSector = toggleSector;
 
-// Parse Trading Logic packed number rows
-// Each row: YYYY-MM-DD + 13 numbers (SPX, COM, CND, CNS, ENE, FIN, HLT, IND, MAT, REI, TEC, UTL, BRD)
+// Parse Trading Logic breadth table
+// Table rows: YYYY-MM-DD SPX COM CND CNS ENE FIN HLT IND MAT REI TEC UTL Breadth
+// Values are space-separated in the page text but packed when scraped
 function parseTradingLogic(html) {
   const rows = [];
-  const re = /(\d{4}-\d{2}-\d{2})(\d{3,}?)(?=\d{4}-\d{2}-\d{2}|Breadth|$)/g;
+  // Extract the breadth table text — find all date-prefixed data rows
+  const re = /(\d{4}-\d{2}-\d{2})(\d+?)(?=\d{4}-\d{2}-\d{2}|$)/g;
   let m;
   while ((m = re.exec(html)) !== null) {
     const date = m[1];
-    const s = m[2];
+    const s    = m[2];
     if (s.length < 10) continue;
-    // Parse 12 values (0-100 each) + 1 breadth (0-1100)
+    // Parse 13 fields: SPX(2-3 digits) + 11 sectors(2-3 digits, 0-100) + BRD(3-4 digits, 0-1100)
     const nums = [];
     let i = 0;
     for (let f = 0; f < 13; f++) {
       if (i >= s.length) break;
       if (f < 12) {
+        // Each sector value is 0-100; try 3 digits first, then 2, then 1
+        let matched = false;
         for (const len of [3, 2, 1]) {
           if (i + len <= s.length) {
-            const v = parseInt(s.slice(i, i+len));
-            if (v <= 100) { nums.push(v); i += len; break; }
+            const v = parseInt(s.slice(i, i + len));
+            if (v <= 100) { nums.push(v); i += len; matched = true; break; }
           }
         }
+        if (!matched) break;
       } else {
-        nums.push(parseInt(s.slice(i)));
+        // Breadth: remaining digits (0-1100)
+        const remaining = s.slice(i);
+        if (remaining) nums.push(parseInt(remaining));
       }
     }
     if (nums.length < 13) continue;
-    // Skip rows where all sectors are 0 or 100 (weekends/placeholders)
     const sectors = nums.slice(1, 12);
-    const allSame = sectors.every(v => v === 0 || v === 100);
-    if (allSame && sectors[0] === sectors[1]) continue;
+    // Skip weekends / placeholder rows (all 0 or all 100)
+    const isPlaceholder = sectors.every(v => v === 0) || sectors.every(v => v === 100);
+    if (isPlaceholder) continue;
+    // Skip rows with implausibly low variety (e.g. all same value)
+    const uniq = new Set(sectors).size;
+    if (uniq <= 2) continue;
     rows.push({
       Date: date,
-      COM: nums[1], CND: nums[2], CNS: nums[3], ENE: nums[4],
-      FIN: nums[5], HLT: nums[6], IND: nums[7], MAT: nums[8],
-      REI: nums[9], TEC: nums[10], UTL: nums[11],
+      COM: nums[1],  CND: nums[2],  CNS: nums[3],  ENE: nums[4],
+      FIN: nums[5],  HLT: nums[6],  IND: nums[7],  MAT: nums[8],
+      REI: nums[9],  TEC: nums[10], UTL: nums[11],
       BRD: Math.round(nums[12] / 11)
     });
   }
-  // Sort chronological, deduplicate dates, take last 90
   const seen = new Set();
-  return rows.filter(r => { if (seen.has(r.Date)) return false; seen.add(r.Date); return true; })
-    .sort((a,b) => a.Date.localeCompare(b.Date))
+  return rows
+    .filter(r => { if (seen.has(r.Date)) return false; seen.add(r.Date); return true; })
+    .sort((a, b) => a.Date.localeCompare(b.Date))
     .slice(-90);
 }
 
@@ -1104,7 +1120,7 @@ async function loadTrends() {
 
   // Check localStorage cache (valid for today)
   const today = new Date().toISOString().slice(0,10);
-  const cached = (() => { try { return JSON.parse(localStorage.getItem('tl_breadth_v2') || '{}'); } catch { return {}; } })();
+  const cached = (() => { try { return JSON.parse(localStorage.getItem('tl_breadth_v3') || '{}'); } catch { return {}; } })();
 
   if (cached.date === today && cached.rows?.length) {
     liveData = cached.rows;
@@ -1119,7 +1135,7 @@ async function loadTrends() {
     const rows = parseTradingLogic(html);
     if (rows.length > 10) {
       liveData = rows;
-      localStorage.setItem('tl_breadth_v2', JSON.stringify({ date: today, rows }));
+      localStorage.setItem('tl_breadth_v3', JSON.stringify({ date: today, rows }));
       ts.textContent = rows.length + ' trading days · live · trading-logic.com · updated ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
     } else {
       throw new Error('too few rows: ' + rows.length);
@@ -1246,6 +1262,7 @@ async function loadBreadth(force=false) {
 
   // Save today's readings to GitHub and enable card click listeners
   addBreadthCardListeners();
+  updateGhSetupStatus();
   saveBreadthToday();
 }
 
@@ -1253,13 +1270,30 @@ async function loadBreadth(force=false) {
 // Saves daily MA breadth readings to breadth-history.json in your GitHub repo.
 // Requires a GitHub Personal Access Token with repo write access.
 
-function getGithubToken() {
+function getGithubToken(prompt_if_missing = false) {
   let t = localStorage.getItem('github_pat') ?? '';
-  if (!t || !t.startsWith('github_pat_') && !t.startsWith('ghp_') && !t.startsWith('gho_')) {
-    t = (prompt('Enter your GitHub Personal Access Token (ghp_... or github_pat_...):\n\nNeeded to save breadth history to your repo.\nCreate one at: github.com/Settings/Tokens (scope: repo)') ?? '').trim();
-    if (t) localStorage.setItem('github_pat', t);
-  }
+  if (t) return t;
+  if (!prompt_if_missing) return null;
+  t = (window.prompt('Enter your GitHub Personal Access Token (ghp_... or github_pat_...):\n\nNeeded to save breadth history. Create at:\ngithub.com/settings/tokens (scope: repo)') ?? '').trim();
+  if (t) localStorage.setItem('github_pat', t);
   return t || null;
+}
+
+// Show GitHub setup status in breadth panel
+function updateGhSetupStatus() {
+  const el = document.getElementById('ghSetupStatus');
+  if (!el) return;
+  const hasToken = !!localStorage.getItem('github_pat');
+  const hasRepo  = !!GH_OWNER && !!GH_REPO;
+  if (hasToken && hasRepo) {
+    el.textContent = '✓ GitHub connected — history saves automatically';
+    el.style.color = 'var(--green)';
+  } else if (!hasToken) {
+    el.innerHTML = '⚠ No GitHub token — <a href="#" onclick="event.preventDefault();getGithubToken(true);updateGhSetupStatus()" style="color:var(--accent)">click to set token</a>';
+  } else {
+    el.textContent = '⚠ GH_OWNER / GH_REPO not set in code';
+    el.style.color = 'var(--gold)';
+  }
 }
 
 // GitHub repo config — update these to match your repo
@@ -1267,8 +1301,8 @@ const GH_OWNER = 'xxxtopher';
 const GH_REPO  = 'Dark-Dash';
 const GH_FILE  = 'breadth-history.json';
 
-async function ghReadFile() {
-  const token = getGithubToken();
+async function ghReadFile(prompt_if_missing=false) {
+  const token = getGithubToken(prompt_if_missing);
   if (!token || !GH_OWNER || !GH_REPO) return null;
   try {
     const res = await fetch(`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_FILE}`, {
@@ -1283,7 +1317,7 @@ async function ghReadFile() {
 }
 
 async function ghWriteFile(rows, sha) {
-  const token = getGithubToken();
+  const token = getGithubToken(true);
   if (!token || !GH_OWNER || !GH_REPO) return false;
   try {
     const body = { message: 'breadth: ' + new Date().toISOString().slice(0,10),
@@ -1306,8 +1340,8 @@ async function saveBreadthToday() {
   const statusEl = document.getElementById('bhSaveStatus');
   if (statusEl) statusEl.textContent = 'Saving to GitHub…';
 
-  const existing = await ghReadFile();
-  if (!existing) { if (statusEl) statusEl.textContent = 'GitHub not configured.'; return; }
+  const existing = await ghReadFile(true);
+  if (!existing) { if (statusEl) statusEl.textContent = 'GitHub not configured — set token first.'; return; }
 
   // Avoid duplicate for same day
   const rows = existing.rows.filter(r => r.date !== today);
@@ -1328,7 +1362,7 @@ async function showBreadthHistory(metric, label, color) {
   document.getElementById('bhSaveStatus').textContent = '';
   document.getElementById('bhOverlay').classList.add('visible');
 
-  const existing = await ghReadFile();
+  const existing = await ghReadFile(false);
   const rows = existing?.rows ?? [];
   if (!rows.length) {
     document.getElementById('bhMeta').textContent = 'No history yet — data saves automatically after Market Breadth runs.';
