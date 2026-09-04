@@ -1333,9 +1333,11 @@ async function ghWriteFile(rows, sha) {
 }
 
 async function saveBreadthToday() {
-  if (!GH_OWNER || !GH_REPO) return; // not configured
+  if (!GH_OWNER || !GH_REPO) return;
   const { above20, above50, above200, up, down, highs, lows } = breadthState;
-  if (above20 == null) return; // not computed yet
+  if (above20 == null) return;
+  const tot = (up??0) + (down??0);
+  const adv_pct = tot > 0 ? parseFloat((up/tot*100).toFixed(1)) : null;
   const today = new Date().toISOString().slice(0,10);
   const statusEl = document.getElementById('bhSaveStatus');
   if (statusEl) statusEl.textContent = 'Saving to GitHub…';
@@ -1343,10 +1345,9 @@ async function saveBreadthToday() {
   const existing = await ghReadFile(true);
   if (!existing) { if (statusEl) statusEl.textContent = 'GitHub not configured — set token first.'; return; }
 
-  // Avoid duplicate for same day
   const rows = existing.rows.filter(r => r.date !== today);
   rows.push({ date: today, ma20: above20, ma50: above50, ma200: above200,
-    adv: up, dec: down, highs, lows });
+    adv: up, dec: down, adv_pct, highs, lows });
   rows.sort((a,b) => a.date.localeCompare(b.date));
 
   const ok = await ghWriteFile(rows, existing.sha);
@@ -1358,14 +1359,24 @@ async function saveBreadthToday() {
 // Draw breadth history chart in modal
 async function showBreadthHistory(metric, label, color) {
   document.getElementById('bhTitle').textContent = label + ' — Historical Readings';
-  document.getElementById('bhMeta').textContent = 'Loading…';
   document.getElementById('bhSaveStatus').textContent = '';
   document.getElementById('bhOverlay').classList.add('visible');
 
+  const token = getGithubToken(false);
+  if (!token) {
+    document.getElementById('bhMeta').innerHTML =
+      'GitHub token not set. <a href="#" onclick="event.preventDefault();localStorage.setItem(\'github_pat\',window.prompt(\'Enter GitHub token (ghp_...):\')||\'\')+\';showBreadthHistory(\''+metric+'\',\''+label+'\',\''+color+'\')" style="color:var(--accent)">Click to set token</a>, then run Market Breadth to start saving history.';
+    return;
+  }
+
+  document.getElementById('bhMeta').textContent = 'Loading from GitHub…';
+
   const existing = await ghReadFile(false);
   const rows = existing?.rows ?? [];
+
   if (!rows.length) {
-    document.getElementById('bhMeta').textContent = 'No history yet — data saves automatically after Market Breadth runs.';
+    document.getElementById('bhMeta').innerHTML =
+      'No history saved yet.<br><span style="font-size:9px;color:var(--text3)">Run Market Breadth to compute and save today\'s data. It auto-saves to <strong>breadth-history.json</strong> in your repo after each computation.</span>';
     return;
   }
 
@@ -1393,16 +1404,13 @@ async function showBreadthHistory(metric, label, color) {
     ctx.fillStyle='rgba(180,200,220,0.5)'; ctx.font='8px monospace'; ctx.textAlign='right';
     ctx.fillText(v+'%', PAD.left-4, toY(v)+3);
   });
-  // 50% dashed
   ctx.setLineDash([4,4]); ctx.strokeStyle='rgba(255,255,255,0.2)';
   ctx.beginPath(); ctx.moveTo(PAD.left,toY(50)); ctx.lineTo(PAD.left+cW,toY(50)); ctx.stroke();
   ctx.setLineDash([]);
 
-  // Date labels
   ctx.fillStyle='rgba(180,200,220,0.5)'; ctx.font='8px monospace'; ctx.textAlign='center';
   dates.forEach((d,i) => { if (N<=10||i%Math.ceil(N/8)===0||i===N-1) ctx.fillText(d, toX(i), H-4); });
 
-  // Fill gradient
   const grad = ctx.createLinearGradient(0,PAD.top,0,PAD.top+cH);
   grad.addColorStop(0, color+'55'); grad.addColorStop(1, color+'00');
   ctx.beginPath();
@@ -1410,12 +1418,10 @@ async function showBreadthHistory(metric, label, color) {
   ctx.lineTo(toX(N-1),toY(0)); ctx.lineTo(toX(0),toY(0)); ctx.closePath();
   ctx.fillStyle=grad; ctx.fill();
 
-  // Line
   ctx.beginPath();
   values.forEach((v,i) => i===0 ? ctx.moveTo(toX(i),toY(v)) : ctx.lineTo(toX(i),toY(v)));
   ctx.strokeStyle=color; ctx.lineWidth=2; ctx.stroke();
 
-  // Dots
   values.forEach((v,i) => {
     ctx.beginPath(); ctx.arc(toX(i),toY(v),3,0,Math.PI*2);
     ctx.fillStyle=color; ctx.fill();
@@ -1423,7 +1429,9 @@ async function showBreadthHistory(metric, label, color) {
 
   const latest = values[values.length-1];
   document.getElementById('bhMeta').textContent =
-    `${N} readings · Latest: ${latest.toFixed(1)}% on ${rows[N-1].date} · Click card again to refresh`;
+    `${N} readings · Latest: ${latest.toFixed(1)}% on ${rows[N-1].date}`;
+  document.getElementById('bhSaveStatus').textContent =
+    `Saved in: github.com/${GH_OWNER}/${GH_REPO}/${GH_FILE}`;
 }
 
 // Make breadth cards clickable
@@ -1436,6 +1444,7 @@ function addBreadthCardListeners() {
     const card = e.target.closest('.breadth-card');
     if (!card) return;
     const title = card.querySelector('.breadth-card-title')?.textContent ?? '';
+    if (title.includes('Advance'))  showBreadthHistory('adv_pct', '% Advancing (A/D)', '#a78bfa');
     if (title.includes('20'))  showBreadthHistory('ma20',  '% Above 20-Day MA',  '#00e676');
     if (title.includes('50'))  showBreadthHistory('ma50',  '% Above 50-Day MA',  '#ffd700');
     if (title.includes('200')) showBreadthHistory('ma200', '% Above 200-Day MA', '#ff6b6b');
