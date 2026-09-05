@@ -134,8 +134,19 @@
 
   /* Sentiment Bar */
   .sentiment-bar { background:var(--bg); border-bottom:1px solid var(--border); padding:6px 28px; display:flex; gap:6px; align-items:stretch; overflow-x:auto; }
-  .sent-cell { background:var(--bg2); border:1px solid var(--border); border-radius:5px; padding:5px 10px 4px; display:flex; flex-direction:column; justify-content:flex-start; min-width:110px; flex:1; cursor:default; transition:border-color 0.15s; }
+  .sent-cell { background:var(--bg2); border:1px solid var(--border); border-radius:5px; padding:5px 10px 4px; display:flex; flex-direction:column; justify-content:flex-start; min-width:110px; flex:1; cursor:pointer; transition:border-color 0.15s; }
   .sent-cell:hover { border-color:var(--border2); }
+  .sent-cell.no-chart { cursor:default; }
+
+  /* Sentiment history modal */
+  .sm-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:100; align-items:center; justify-content:center; }
+  .sm-overlay.visible { display:flex; }
+  .sm-modal { background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:16px 20px; width:min(720px,92vw); position:relative; }
+  .sm-title { font-size:11px; color:var(--accent); letter-spacing:1.5px; text-transform:uppercase; font-weight:600; margin-bottom:12px; }
+  .sm-canvas-wrap { width:100%; height:200px; position:relative; }
+  .sm-meta { font-size:9px; color:var(--text3); margin-top:8px; display:flex; justify-content:space-between; }
+  .sm-close { position:absolute; top:12px; right:16px; background:none; border:none; color:var(--text3); font-size:18px; cursor:pointer; line-height:1; }
+  .sm-close:hover { color:var(--text); }
   .sent-top { display:flex; justify-content:space-between; align-items:flex-start; gap:6px; }
   .sent-label { font-size:10px; color:var(--text2); letter-spacing:1.5px; text-transform:uppercase; margin-bottom:3px; white-space:nowrap; font-weight:600; }
   .sent-price { font-size:13px; font-weight:700; color:var(--text); letter-spacing:-0.3px; white-space:nowrap; }
@@ -366,6 +377,16 @@
   <div class="sent-cell"><div class="sent-label">Bitcoin</div><div class="sent-top"><div class="sent-price loading" id="sent-btc-p">···</div><div class="sent-pct loading" id="sent-btc-c">···</div></div><canvas class="sent-spark" id="sent-btc-k"></canvas></div>
   <div class="sent-cell"><div class="sent-label">Ethereum</div><div class="sent-top"><div class="sent-price loading" id="sent-eth-p">···</div><div class="sent-pct loading" id="sent-eth-c">···</div></div><canvas class="sent-spark" id="sent-eth-k"></canvas></div>
   <div class="sent-cell"><div class="sent-label">USD Index</div><div class="sent-top"><div class="sent-price loading" id="sent-dxy-p">···</div><div class="sent-pct loading" id="sent-dxy-c">···</div></div><canvas class="sent-spark" id="sent-dxy-k"></canvas></div>
+</div>
+
+<!-- Sentiment History Modal -->
+<div class="sm-overlay" id="smOverlay">
+  <div class="sm-modal">
+    <button class="sm-close" onclick="document.getElementById('smOverlay').classList.remove('visible')">✕</button>
+    <div class="sm-title" id="smTitle">3-Month Trend</div>
+    <div class="sm-canvas-wrap"><canvas id="smCanvas"></canvas></div>
+    <div class="sm-meta"><span id="smMeta"></span><span id="smSource">Source: Yahoo Finance</span></div>
+  </div>
 </div>
 
 <!-- Sector Trends Panel (hidden by default) -->
@@ -847,7 +868,7 @@ async function loadMarketOverview() {
 const SECTOR_COLS = [
   { key:'TEC', name:'Technology',   color:'#00b4ff' },
   { key:'HLT', name:'Healthcare',   color:'#f9a825' },
-  { key:'FIN', name:'Financials',   color:'#90caf9' },
+  { key:'FIN', name:'Financials',   color:'#ef4444' },
   { key:'IND', name:'Industrials',  color:'#ffb74d' },
   { key:'CND', name:'Cons Disc',    color:'#f06292' },
   { key:'CNS', name:'Cons Staples', color:'#a5d6a7' },
@@ -1989,14 +2010,129 @@ document.getElementById('newsBtn').addEventListener('click', () => {
 
 // ─── SENTIMENT BAR ────────────────────────────────────────────────────────────
 const SENTIMENT_TICKERS = [
-  { id:'gold',   sym:'GC=F',    fmt: p => '$'+p.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) },
-  { id:'silver', sym:'SI=F',    fmt: p => '$'+p.toFixed(3) },
-  { id:'oil',    sym:'CL=F',    fmt: p => '$'+p.toFixed(2) },
-  { id:'tnx',    sym:'%5ETNX',  fmt: p => p.toFixed(3)+'%' },
-  { id:'btc',    sym:'BTC-USD', fmt: p => '$'+p.toLocaleString('en-US',{maximumFractionDigits:0}) },
-  { id:'eth',    sym:'ETH-USD', fmt: p => '$'+p.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) },
-  { id:'dxy',    sym:'DX-Y.NYB',fmt: p => p.toFixed(3) },
+  { id:'gold',   sym:'GC=F',    label:'Gold (GC=F)',          fmt: p => '$'+p.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) },
+  { id:'silver', sym:'SI=F',    label:'Silver (SI=F)',         fmt: p => '$'+p.toFixed(3) },
+  { id:'oil',    sym:'CL=F',    label:'Crude Oil (CL=F)',      fmt: p => '$'+p.toFixed(2) },
+  { id:'tnx',    sym:'%5ETNX',  label:'10-Year Yield (^TNX)',  fmt: p => p.toFixed(3)+'%' },
+  { id:'btc',    sym:'BTC-USD', label:'Bitcoin',               fmt: p => '$'+p.toLocaleString('en-US',{maximumFractionDigits:0}) },
+  { id:'eth',    sym:'ETH-USD', label:'Ethereum',              fmt: p => '$'+p.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) },
+  { id:'dxy',    sym:'DX-Y.NYB',label:'USD Index',             fmt: p => p.toFixed(3) },
 ];
+
+// Sentiment cells that support 3-month chart (Gold, Silver, Oil, 10Y Yield)
+const SENT_CHART_IDS = new Set(['gold','silver','oil','tnx']);
+
+async function showSentimentHistory(tk) {
+  const modal = document.getElementById('smOverlay');
+  const titleEl = document.getElementById('smTitle');
+  const metaEl  = document.getElementById('smMeta');
+  titleEl.textContent = tk.label + ' — 3-Month Trend';
+  metaEl.textContent  = 'Loading…';
+  modal.classList.add('visible');
+
+  try {
+    // Fetch 3-month daily closes from Yahoo Finance via worker
+    const data = await fetchOne(`${YF_BASE}/v8/finance/chart/${tk.sym}?range=3mo&interval=1d`);
+    const result = data?.chart?.result?.[0];
+    if (!result) throw new Error('no data');
+
+    const timestamps = result.timestamp ?? [];
+    const closes     = result.indicators?.quote?.[0]?.close ?? [];
+    const dates      = timestamps.map(t => new Date(t*1000).toLocaleDateString('en-US',{month:'short',day:'numeric'}));
+
+    // Filter nulls
+    const pts = timestamps.map((t,i) => ({ t, c: closes[i] })).filter(p => p.c != null);
+    if (!pts.length) throw new Error('empty closes');
+
+    const canvas = document.getElementById('smCanvas');
+    const W = canvas.parentElement.clientWidth || 680, H = 200;
+    const dpr = devicePixelRatio || 1;
+    canvas.width = W*dpr; canvas.height = H*dpr;
+    canvas.style.width = W+'px'; canvas.style.height = H+'px';
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    const N = pts.length;
+    const PAD = { top:8, right:10, bottom:22, left:52 };
+    const cW = W - PAD.left - PAD.right;
+    const cH = H - PAD.top  - PAD.bottom;
+    const vals  = pts.map(p => p.c);
+    const minV  = Math.min(...vals), maxV = Math.max(...vals);
+    const range = maxV - minV || 1;
+    const toX   = i => PAD.left + (i/(N-1||1))*cW;
+    const toY   = v => PAD.top  + (1-(v-minV)/range)*cH;
+
+    const up = vals[vals.length-1] >= vals[0];
+    const lineColor = up ? '#00e676' : '#ff4444';
+
+    // Grid lines (5 horizontal)
+    const step = range / 4;
+    for (let s = 0; s <= 4; s++) {
+      const v = minV + s * step;
+      const y = toY(v);
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left+cW, y); ctx.stroke();
+      ctx.fillStyle = 'rgba(180,200,220,0.6)'; ctx.font = '8px monospace'; ctx.textAlign = 'right';
+      ctx.fillText(tk.id === 'tnx' ? v.toFixed(3)+'%' : v >= 1000 ? v.toLocaleString('en-US',{maximumFractionDigits:0}) : v.toFixed(2), PAD.left-4, y+3);
+    }
+
+    // Date labels every ~15 points
+    ctx.fillStyle = 'rgba(180,200,220,0.5)'; ctx.font = '8px monospace'; ctx.textAlign = 'center';
+    pts.forEach((p, i) => {
+      if (i % Math.ceil(N/6) === 0 || i === N-1) {
+        const d = new Date(p.t*1000).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+        ctx.fillText(d, toX(i), H-4);
+      }
+    });
+
+    // Gradient fill
+    const grad = ctx.createLinearGradient(0, PAD.top, 0, PAD.top+cH);
+    grad.addColorStop(0, lineColor+'44'); grad.addColorStop(1, lineColor+'00');
+    ctx.beginPath();
+    pts.forEach((p,i) => i===0 ? ctx.moveTo(toX(i),toY(p.c)) : ctx.lineTo(toX(i),toY(p.c)));
+    ctx.lineTo(toX(N-1), toY(minV)); ctx.lineTo(toX(0), toY(minV));
+    ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
+
+    // Price line
+    ctx.beginPath();
+    pts.forEach((p,i) => i===0 ? ctx.moveTo(toX(i),toY(p.c)) : ctx.lineTo(toX(i),toY(p.c)));
+    ctx.strokeStyle = lineColor; ctx.lineWidth = 2; ctx.stroke();
+
+    // End dot
+    const last = pts[N-1];
+    ctx.beginPath(); ctx.arc(toX(N-1), toY(last.c), 3, 0, Math.PI*2);
+    ctx.fillStyle = lineColor; ctx.fill();
+
+    const chg = ((last.c - pts[0].c) / pts[0].c * 100).toFixed(2);
+    metaEl.textContent = `${N} sessions · ${pts[0] ? new Date(pts[0].t*1000).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : ''} → ${new Date(last.t*1000).toLocaleDateString('en-US',{month:'short',day:'numeric'})} · 3M change: ${chg >= 0 ? '+' : ''}${chg}%`;
+
+  } catch(e) {
+    metaEl.textContent = 'Failed to load: ' + e.message;
+    console.warn('[sent chart]', e);
+  }
+}
+
+// Wire up click handlers on sentiment cells
+function setupSentimentClicks() {
+  document.getElementById('sentimentBar').addEventListener('click', e => {
+    const cell = e.target.closest('.sent-cell');
+    if (!cell) return;
+    // Find which ticker this cell belongs to
+    const canvas = cell.querySelector('canvas');
+    if (!canvas) return;
+    const id = canvas.id.replace('sent-','').replace('-k','');
+    if (!SENT_CHART_IDS.has(id)) return;
+    const tk = SENTIMENT_TICKERS.find(t => t.id === id);
+    if (tk) showSentimentHistory(tk);
+  });
+  // Add no-chart class to non-chartable cells
+  SENTIMENT_TICKERS.forEach(tk => {
+    if (!SENT_CHART_IDS.has(tk.id)) {
+      const canvas = document.getElementById('sent-'+tk.id+'-k');
+      if (canvas) canvas.closest('.sent-cell')?.classList.add('no-chart');
+    }
+  });
+}
 
 function updateSentCell(id, price, pct) {
   const pe = document.getElementById('sent-'+id+'-p');
@@ -2104,6 +2240,7 @@ loadMarketOverview();
 loadSentiment();
 loadAll();
 loadWatchlist();
+setupSentimentClicks();
 
 </script>
 </body>
