@@ -131,6 +131,16 @@
   .trends-legend-name { font-size:9px; color:var(--text2); letter-spacing:0.5px; text-transform:uppercase; }
   .trends-canvas-wrap { position:relative; width:100%; height:220px; }
   .trends-tooltip { position:absolute; background:rgba(13,17,23,0.95); border:1px solid var(--border); border-radius:4px; padding:6px 10px; font-size:9px; color:var(--text); pointer-events:none; display:none; white-space:nowrap; z-index:10; }
+  /* Momentum sidebar */
+  .mom-title { font-size:8.5px; color:var(--text3); letter-spacing:1px; text-transform:uppercase; margin-bottom:6px; padding-bottom:4px; border-bottom:1px solid var(--border); }
+  .mom-section-label { font-size:8px; letter-spacing:0.8px; text-transform:uppercase; margin:6px 0 3px; font-weight:600; }
+  .mom-row { display:flex; justify-content:space-between; align-items:center; padding:2px 4px; border-radius:3px; margin-bottom:2px; }
+  .mom-row:hover { background:rgba(255,255,255,0.04); }
+  .mom-name { font-size:10px; color:var(--text); }
+  .mom-delta { font-size:10px; font-weight:600; }
+  .mom-delta.pos { color:var(--green); }
+  .mom-delta.neg { color:var(--red); }
+  .mom-divider { border:none; border-top:1px solid var(--border); margin:6px 0; }
 
   /* Sentiment Bar */
   .sentiment-bar { background:var(--bg); border-bottom:1px solid var(--border); padding:6px 28px; display:flex; gap:6px; align-items:stretch; overflow-x:auto; }
@@ -392,13 +402,18 @@
 <!-- Sector Trends Panel (hidden by default) -->
 <div class="trends-panel" id="trendsPanel">
   <div class="trends-header">
-    <span class="trends-label">📊 Sector Breadth Trends · Last 60 Days · via Trading Logic</span>
+    <span class="trends-label">📊 Sector Breadth Trends · Last 90 Days · via Trading Logic</span>
     <span class="trends-ts" id="trendsTs"></span>
   </div>
-  <div class="trends-legend" id="trendsLegend"></div>
-  <div class="trends-canvas-wrap">
-    <canvas id="trendsCanvas"></canvas>
-    <div class="trends-tooltip" id="trendsTip"></div>
+  <div style="display:grid;grid-template-columns:1fr 200px;gap:12px;align-items:start">
+    <div>
+      <div class="trends-legend" id="trendsLegend"></div>
+      <div class="trends-canvas-wrap">
+        <canvas id="trendsCanvas"></canvas>
+        <div class="trends-tooltip" id="trendsTip"></div>
+      </div>
+    </div>
+    <div id="trendsMomentum" style="padding-top:4px"></div>
   </div>
 </div>
 
@@ -1058,6 +1073,48 @@ function setupTrendsInteraction() {
   canvas.addEventListener('mouseleave', ()=>{ tip.style.display='none'; });
 }
 
+function renderTrendsMomentum() {
+  const el = document.getElementById('trendsMomentum');
+  if (!el) return;
+  const data = liveData || TRENDS_DATA;
+  if (data.length < 6) { el.innerHTML = ''; return; }
+
+  // Compare latest vs 5 days ago for each sector
+  const latest = data[data.length - 1];
+  const prev5  = data[data.length - 6] ?? data[0];
+
+  const deltas = SECTOR_COLS
+    .filter(c => c.key !== 'BRD')
+    .map(col => ({
+      name:  col.name,
+      color: col.color,
+      now:   latest[col.key] ?? 0,
+      then:  prev5[col.key]  ?? 0,
+      delta: (latest[col.key] ?? 0) - (prev5[col.key] ?? 0),
+    }))
+    .sort((a, b) => b.delta - a.delta);
+
+  const top5 = deltas.slice(0, 5);
+  const bot5 = deltas.slice(-5).reverse();
+
+  const prevDate = prev5.Date?.slice(5) ?? '';
+  const nowDate  = latest.Date?.slice(5) ?? '';
+
+  const row = d => `<div class="mom-row">
+    <span class="mom-name" style="color:${d.color}">${d.name}</span>
+    <span class="mom-delta ${d.delta >= 0 ? 'pos' : 'neg'}">${d.delta >= 0 ? '+' : ''}${d.delta}pt</span>
+  </div>`;
+
+  el.innerHTML = `
+    <div class="mom-title">5-Day Momentum<br><span style="font-size:8px;font-weight:400">${prevDate} → ${nowDate}</span></div>
+    <div class="mom-section-label" style="color:var(--green)">▲ Improving</div>
+    ${top5.map(row).join('')}
+    <hr class="mom-divider">
+    <div class="mom-section-label" style="color:var(--red)">▼ Worsening</div>
+    ${bot5.map(row).join('')}
+  `;
+}
+
 function renderTrendsLegend() {
   document.getElementById('trendsLegend').innerHTML = SECTOR_COLS.map(col=>
     `<div class="trends-legend-item${hiddenSectors.has(col.key)?' hidden':''}" onclick="toggleSector('${col.key}')">
@@ -1068,7 +1125,7 @@ function renderTrendsLegend() {
 
 function toggleSector(key) {
   hiddenSectors.has(key) ? hiddenSectors.delete(key) : hiddenSectors.add(key);
-  renderTrendsLegend(); drawTrendsChart();
+  renderTrendsLegend(); drawTrendsChart(); renderTrendsMomentum();
 }
 window.toggleSector = toggleSector;
 
@@ -1144,7 +1201,7 @@ async function loadTrends() {
   if (cached.date === today && cached.rows?.length) {
     liveData = cached.rows;
     ts.textContent = cached.rows.length + ' trading days · live · trading-logic.com · cached today';
-    requestAnimationFrame(() => { drawTrendsChart(); setupTrendsInteraction(); });
+    requestAnimationFrame(() => { drawTrendsChart(); setupTrendsInteraction(); renderTrendsMomentum(); });
     return;
   }
 
@@ -1165,7 +1222,7 @@ async function loadTrends() {
     ts.textContent = TRENDS_DATA.length + ' trading days · static fallback · trading-logic.com';
   }
 
-  requestAnimationFrame(() => { drawTrendsChart(); setupTrendsInteraction(); });
+  requestAnimationFrame(() => { drawTrendsChart(); setupTrendsInteraction(); renderTrendsMomentum(); });
 }
 
 document.getElementById('trendsBtn').addEventListener('click', () => {
