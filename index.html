@@ -112,8 +112,25 @@
   .news-bullet-link { color:inherit; text-decoration:none; }
   .news-link { font-size:9.5px; color:var(--text2); text-decoration:none; }
   .filing-link { color:var(--gold); }
-  .btn-breadth.active { border-color:var(--gold); color:var(--gold); background:rgba(255,215,0,0.05); }
-  .btn-breadth.computing { opacity:0.6; pointer-events:none; }
+  .btn-analysis:hover { border-color:#34d399; color:#34d399; }
+  .btn-analysis.active { border-color:#34d399; color:#34d399; background:rgba(52,211,153,0.07); }
+  .btn-analysis.computing { opacity:0.6; pointer-events:none; }
+
+  /* Market Analysis Panel */
+  .analysis-panel { display:none; border-bottom:1px solid var(--border); background:var(--bg2); }
+  .analysis-panel.visible { display:block; }
+  .analysis-header { display:flex; align-items:center; justify-content:space-between; padding:8px 28px; border-bottom:1px solid var(--border); }
+  .analysis-label { font-size:10px; color:#34d399; letter-spacing:1.5px; text-transform:uppercase; font-weight:600; }
+  .analysis-ts { font-size:9px; color:var(--text3); }
+  .analysis-body { padding:14px 28px; display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:12px; }
+  .analysis-card { background:var(--bg3); border:1px solid var(--border); border-radius:6px; padding:10px 14px; }
+  .analysis-card-title { font-size:9px; color:#34d399; letter-spacing:1.2px; text-transform:uppercase; font-weight:600; margin-bottom:6px; padding-bottom:4px; border-bottom:1px solid var(--border); }
+  .analysis-points { list-style:none; display:flex; flex-direction:column; gap:5px; }
+  .analysis-point { font-size:10.5px; color:var(--text); line-height:1.55; padding-left:12px; position:relative; }
+  .analysis-point::before { content:'▸'; position:absolute; left:0; color:#34d399; font-size:8px; top:2px; }
+  .analysis-verdict { margin-top:10px; padding:8px 28px; background:var(--bg); border-top:1px solid var(--border); font-size:10.5px; color:var(--text2); line-height:1.6; }
+  .analysis-verdict strong { color:var(--text); }
+  .analysis-source { font-size:9px; color:var(--text3); padding:4px 28px 8px; }
   .btn-trends:hover { border-color:#818cf8; color:#818cf8; }
   .btn-trends.active { border-color:#818cf8; color:#818cf8; background:rgba(129,140,248,0.07); }
   .btn-trends.computing { opacity:0.6; pointer-events:none; }
@@ -330,6 +347,7 @@
     <button class="btn btn-movers" id="moversBtn"><span class="btn-icon">🔥</span> Theme Movers</button>
     <button class="btn btn-trump" id="trumpBtn"><span class="btn-icon">🇺🇸</span> Trump Daily</button>
     <button class="btn btn-news" id="newsBtn"><span class="btn-icon">📰</span> News & Filings</button>
+    <button class="btn btn-analysis" id="analysisBtn"><span class="btn-icon">🧠</span> Market Analysis</button>
     <button class="btn btn-trends" id="trendsBtn"><span class="btn-icon">📊</span> Sector Trends</button>
     <button class="btn btn-breadth" id="breadthBtn"><span class="btn-icon">⬡</span> Market Breadth</button>
     <button class="btn" id="resetKeyBtn" title="Reset Anthropic API key" onclick="localStorage.removeItem('anthropic_api_key');alert('API key cleared. Re-enter on next AI feature use.')">🔑</button>
@@ -397,6 +415,19 @@
     <div class="sm-canvas-wrap"><canvas id="smCanvas"></canvas></div>
     <div class="sm-meta"><span id="smMeta"></span><span id="smSource">Source: Yahoo Finance</span></div>
   </div>
+</div>
+
+<!-- Market Analysis Panel (hidden by default) -->
+<div class="analysis-panel" id="analysisPanel">
+  <div class="analysis-header">
+    <span class="analysis-label">🧠 AI Market Analysis · Live Indicators</span>
+    <span class="analysis-ts" id="analysisTs"></span>
+  </div>
+  <div class="analysis-body" id="analysisBody">
+    <div style="font-size:11px;color:var(--text3);font-style:italic;grid-column:1/-1">Click "Market Analysis" to generate an AI summary based on your live dashboard indicators.</div>
+  </div>
+  <div class="analysis-verdict" id="analysisVerdict" style="display:none"></div>
+  <div class="analysis-source" id="analysisSource"></div>
 </div>
 
 <!-- Sector Trends Panel (hidden by default) -->
@@ -1619,6 +1650,162 @@ async function loadWatchlist() {
     for (const sym of syms) await run(sym);
   }
 }
+
+// ─── MARKET ANALYSIS ──────────────────────────────────────────────────────────
+let analysisVisible = false;
+let analysisComputing = false;
+let analysisLastRun = null;
+const ANALYSIS_CACHE_MS = 30 * 60 * 1000;
+
+// Collect all live dashboard indicators into a structured snapshot
+function collectIndicators() {
+  const snap = { timestamp: new Date().toISOString(), indicators: {} };
+
+  // Breadth indicators
+  const bs = breadthState;
+  if (bs.above20 != null)  snap.indicators['% Stocks Above 20-Day MA'] = bs.above20 + '%';
+  if (bs.above50 != null)  snap.indicators['% Stocks Above 50-Day MA'] = bs.above50 + '%';
+  if (bs.above200 != null) snap.indicators['% Stocks Above 200-Day MA'] = bs.above200 + '%';
+  const tot = (bs.up ?? 0) + (bs.down ?? 0);
+  if (tot > 0) snap.indicators['% Stocks Advancing (A/D)'] = ((bs.up / tot) * 100).toFixed(1) + '%';
+  if (bs.highs != null) snap.indicators['52-Week Highs (count)'] = bs.highs;
+  if (bs.lows  != null) snap.indicators['52-Week Lows (count)']  = bs.lows;
+
+  // Sentiment indicators from sentiment bar
+  const sentMap = { gold:'Gold Price', silver:'Silver Price', oil:'Crude Oil Price',
+    tnx:'10-Year Treasury Yield', btc:'Bitcoin', eth:'Ethereum', dxy:'USD Index' };
+  SENTIMENT_TICKERS.forEach(tk => {
+    const pEl = document.getElementById('sent-'+tk.id+'-p');
+    const cEl = document.getElementById('sent-'+tk.id+'-c');
+    if (pEl && cEl && pEl.textContent !== '···') {
+      snap.indicators[sentMap[tk.id] || tk.id] = pEl.textContent + ' (' + cEl.textContent + ')';
+    }
+  });
+
+  // ETF theme performance
+  const ranked = THEMES
+    .filter(t => etfPerf[t.id]?.pct != null)
+    .sort((a,b) => (etfPerf[b.id]?.pct??-99) - (etfPerf[a.id]?.pct??-99));
+  if (ranked.length) {
+    const top3 = ranked.slice(0,3).map(t => `${t.name} (${t.etf}): ${etfPerf[t.id].pct.toFixed(2)}%`);
+    const bot3 = ranked.slice(-3).reverse().map(t => `${t.name} (${t.etf}): ${etfPerf[t.id].pct.toFixed(2)}%`);
+    snap.indicators['Top ETF Themes Today']    = top3.join(', ');
+    snap.indicators['Bottom ETF Themes Today'] = bot3.join(', ');
+    const advEtfs = ranked.filter(t => etfPerf[t.id].pct > 0).length;
+    snap.indicators['ETFs Advancing / Declining'] = `${advEtfs} up, ${ranked.length - advEtfs} down`;
+  }
+
+  // Sector breadth trends — 5-day momentum from Trading Logic
+  const tdata = liveData || TRENDS_DATA;
+  if (tdata.length >= 6) {
+    const latest = tdata[tdata.length-1];
+    const prev5  = tdata[tdata.length-6];
+    snap.indicators['Total Breadth (Trading Logic)'] = latest.BRD + '% (5d ago: ' + prev5.BRD + '%)';
+    const deltas = SECTOR_COLS.filter(c=>c.key!=='BRD').map(c=>({
+      name:c.name, delta:(latest[c.key]??0)-(prev5[c.key]??0)
+    })).sort((a,b)=>b.delta-a.delta);
+    snap.indicators['Most Improving Sectors (5d)'] = deltas.slice(0,3).map(d=>`${d.name}(${d.delta>0?'+':''}${d.delta}pt)`).join(', ');
+    snap.indicators['Most Worsening Sectors (5d)'] = deltas.slice(-3).reverse().map(d=>`${d.name}(${d.delta}pt)`).join(', ');
+  }
+
+  return snap;
+}
+
+async function runMarketAnalysis() {
+  if (analysisComputing) return;
+  analysisComputing = true;
+  document.getElementById('analysisBtn').classList.add('computing');
+
+  const snap = collectIndicators();
+  const indicatorText = Object.entries(snap.indicators)
+    .map(([k,v]) => `• ${k}: ${v}`).join('\n');
+
+  const hasEnoughData = Object.keys(snap.indicators).length >= 4;
+  if (!hasEnoughData) {
+    document.getElementById('analysisBody').innerHTML =
+      '<div style="font-size:11px;color:var(--gold);grid-column:1/-1">⚠ Not enough live data yet. Please wait for Market Breadth and the Sentiment Bar to finish loading, then try again.</div>';
+    analysisComputing = false;
+    document.getElementById('analysisBtn').classList.remove('computing');
+    return;
+  }
+
+  document.getElementById('analysisBody').innerHTML =
+    '<div style="font-size:11px;color:var(--text3);font-style:italic;grid-column:1/-1">🧠 Analysing ' + Object.keys(snap.indicators).length + ' live indicators…</div>';
+  document.getElementById('analysisVerdict').style.display = 'none';
+  document.getElementById('analysisSource').textContent = '';
+
+  const prompt = `You are a professional market analyst. Below are live market indicators from a trading dashboard as of ${new Date().toLocaleString('en-US', {dateStyle:'full', timeStyle:'short'})}.
+
+LIVE INDICATORS:
+${indicatorText}
+
+Provide a structured market analysis with these four sections:
+1. MARKET BREADTH & INTERNALS — interpret the A/D ratio, % above MA indicators, 52-week highs/lows. Is the market broadly healthy or deteriorating?
+2. MACRO & RISK SENTIMENT — analyse gold, silver, crude oil, 10-year yield, and USD index together. What does the macro picture suggest about risk appetite?
+3. SECTOR ROTATION — based on the ETF theme performance and sector breadth trends, where is money flowing? Which sectors show strength or weakness?
+4. OVERALL ASSESSMENT — a concise 2-3 sentence market verdict with a risk stance (bullish / cautious / bearish).
+
+Write each section as 3-5 bullet points. Be direct and specific, referencing actual numbers. No generic statements.
+
+Respond ONLY in JSON (no markdown fences):
+{"sections":[{"title":"SECTION TITLE","points":["bullet 1","bullet 2"]}],"verdict":"2-3 sentence overall assessment"}`;
+
+  try {
+    const data = await claudeCall({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2000,
+      messages: [{ role:'user', content: prompt }]
+    });
+
+    if (data.error) throw new Error(data.error.message);
+    const text = (data.content ?? []).filter(b=>b.type==='text').map(b=>b.text).join('');
+    const m = text.match(/\{[\s\S]*"sections"[\s\S]*\}/);
+    if (!m) throw new Error('No JSON in response');
+    const result = JSON.parse(m[0]);
+
+    // Render sections
+    const bodyEl = document.getElementById('analysisBody');
+    bodyEl.innerHTML = (result.sections ?? []).map(sec =>
+      `<div class="analysis-card">
+        <div class="analysis-card-title">${sec.title}</div>
+        <ul class="analysis-points">${(sec.points??[]).map(p=>`<li class="analysis-point">${p}</li>`).join('')}</ul>
+      </div>`
+    ).join('');
+
+    // Render verdict
+    if (result.verdict) {
+      const v = document.getElementById('analysisVerdict');
+      v.innerHTML = '<strong>Overall Assessment:</strong> ' + result.verdict;
+      v.style.display = 'block';
+    }
+
+    analysisLastRun = Date.now();
+    document.getElementById('analysisTs').textContent =
+      Object.keys(snap.indicators).length + ' indicators · ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    document.getElementById('analysisSource').textContent =
+      'Powered by Claude AI · Data: Yahoo Finance, Trading Logic · ' + new Date().toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'});
+
+  } catch(e) {
+    console.warn('[analysis]', e.message);
+    document.getElementById('analysisBody').innerHTML =
+      '<div style="font-size:11px;color:var(--red);grid-column:1/-1">✗ Analysis failed: ' + e.message + '</div>';
+  }
+
+  analysisComputing = false;
+  document.getElementById('analysisBtn').classList.remove('computing');
+}
+
+document.getElementById('analysisBtn').addEventListener('click', () => {
+  if (!analysisVisible) {
+    analysisVisible = true;
+    document.getElementById('analysisPanel').classList.add('visible');
+    document.getElementById('analysisBtn').classList.add('active');
+  }
+  // Always re-run on click (or use cache if recent)
+  if (!analysisLastRun || Date.now() - analysisLastRun > ANALYSIS_CACHE_MS) {
+    runMarketAnalysis();
+  }
+});
 
 // ─── TRUMP DAILY ──────────────────────────────────────────────────────────────
 let trumpVisible = false;
