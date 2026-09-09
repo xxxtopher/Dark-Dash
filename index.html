@@ -350,7 +350,7 @@
     <button class="btn btn-analysis" id="analysisBtn"><span class="btn-icon">🧠</span> Market Analysis</button>
     <button class="btn btn-trends" id="trendsBtn"><span class="btn-icon">📊</span> Sector Trends</button>
     <button class="btn btn-breadth" id="breadthBtn"><span class="btn-icon">⬡</span> Market Breadth</button>
-    <button class="btn" id="resetKeyBtn" title="Reset Anthropic API key" onclick="localStorage.removeItem('anthropic_api_key');alert('API key cleared. Re-enter on next AI feature use.')">🔑</button>
+    <button class="btn" id="resetKeyBtn" title="Reset Gemini API key" onclick="localStorage.removeItem('gemini_api_key');alert('Gemini API key cleared. Re-enter on next AI feature use.')">🔑</button>
     <button class="btn" id="refreshBtn"><span class="btn-icon btn-spin">↻</span> Refresh</button>
   </div>
 </div>
@@ -583,44 +583,56 @@ const YF_BASE = 'https://query2.finance.yahoo.com';
 const WORKER_URL = 'https://yahoo-proxy.topherho.workers.dev';
 // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
-// Anthropic API key — stored in browser localStorage, never in source code.
-// You will be prompted to enter it on first use.
-function getAnthropicKey() {
-  let key = localStorage.getItem('anthropic_api_key') ?? '';
-  if (!key || !key.startsWith('sk-ant-')) {
-    key = (prompt('Enter your Anthropic API key (sk-ant-...):') ?? '').trim();
-    if (key.startsWith('sk-ant-')) {
-      localStorage.setItem('anthropic_api_key', key);
-    } else {
-      alert('Invalid key format. Must start with sk-ant-');
-      return null;
-    }
+// Gemini API — free tier, no credit card needed.
+// Get your free key at: aistudio.google.com/app/apikey
+function getGeminiKey() {
+  let key = localStorage.getItem('gemini_api_key') ?? '';
+  if (!key) {
+    key = (prompt('Enter your Gemini API key:\n\nGet a FREE key at:\naistudio.google.com/app/apikey\n(No credit card needed)') ?? '').trim();
+    if (key) localStorage.setItem('gemini_api_key', key);
+    else return null;
   }
   return key;
 }
 
-// Helper: call Claude API
+// claudeCall — wraps Gemini API in Claude-compatible format
+// All callers (News, Analysis, Trump) work without modification
 async function claudeCall(body) {
-  const key = getAnthropicKey();
-  if (!key) throw new Error('No API key');
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-      'x-api-key': key,
-    },
-    body: JSON.stringify(body)
-  });
+  const key = getGeminiKey();
+  if (!key) throw new Error('No Gemini API key set');
+
+  // Extract user prompt from Claude-style messages array
+  const userMsg = (body.messages ?? [])
+    .filter(m => m.role === 'user')
+    .map(m => typeof m.content === 'string' ? m.content
+      : Array.isArray(m.content) ? m.content.map(b => b.text || '').join('') : '')
+    .join('\n');
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: userMsg }] }],
+        generationConfig: { maxOutputTokens: body.max_tokens ?? 2000, temperature: 0.3 }
+      })
+    }
+  );
   const data = await res.json();
-  if (data.error?.type === 'authentication_error') {
-    // Key is wrong — clear it so user is prompted again next time
-    localStorage.removeItem('anthropic_api_key');
-    throw new Error('Invalid API key — cleared. Click the button again to re-enter.');
+
+  if (data.error) {
+    if ([400,401,403].includes(data.error.code)) {
+      localStorage.removeItem('gemini_api_key');
+    }
+    throw new Error(data.error.message ?? 'Gemini API error');
   }
-  return data;
+
+  // Return Claude-compatible response shape
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+  return { content: [{ type: 'text', text }], stop_reason: 'end_turn' };
 }
+
 
 // Fallback to allorigins while worker is not configured (limited to ~13 req/min)
 const PROXY = WORKER_URL
@@ -1325,8 +1337,6 @@ function recomputeBreadth() {
     breadthState.above200 = parseFloat((a200/tot*100).toFixed(1));
     breadthState.highs = hi;
     breadthState.lows  = lo;
-    renderBreadth();
-    const ts = document.getElementById('breadthTimestamp');
     if (ts) ts.textContent = tot + '/' + ALL_HOLDING_SYMS.length + ' computed';
   }
 }
@@ -1752,7 +1762,7 @@ Respond ONLY in JSON (no markdown fences):
 
   try {
     const data = await claudeCall({
-      model: 'claude-sonnet-4-20250514',
+      model: 'gemini-1.5-flash',
       max_tokens: 2000,
       messages: [{ role:'user', content: prompt }]
     });
@@ -1828,63 +1838,38 @@ async function loadTrumpViaClaude() {
   const today = new Date().toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'});
 
   try {
-    // web_search_20250305 is a built-in server-side tool.
-    // Claude searches, gets results, and responds — all in ONE API call.
-    // No multi-turn loop needed. Just call and read the text response.
+    // Gemini doesn't support web_search tool — use knowledge-based prompt
     const data = await claudeCall({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 3000,
-      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-      tool_choice: { type: 'auto' },
+      model: 'gemini-1.5-flash',
+      max_tokens: 2000,
       messages: [{
         role: 'user',
-        content: `Today is ${today}. Search for "Trump Truth Social ${today}" and summarize what Donald Trump posted on Truth Social today.
+        content: `Today is ${today}. Summarize the most recent public statements and Truth Social posts by Donald Trump. Include posts from the last 1-3 days if today's are not available in your knowledge.
 
-Organize the summary into relevant sections such as:
+Organize into sections:
 - KEY POLICY & POLITICAL STATEMENTS
 - MARKET & ECONOMIC COMMENTARY
 - GEOPOLITICAL & INTERNATIONAL
 - GENERAL COMMENTARY
 
-For each section write 2-4 concise bullet points quoting key phrases. Omit sections with no content.
+For each section write 2-4 bullet points quoting key phrases. Omit sections with no content. Note the date of posts where known.
 
-End your response with ONLY this JSON (after your summary text):
-JSONSTART{"sections":[{"title":"SECTION","points":["bullet"]}],"postCount":0}JSONEND`
+Respond ONLY in valid JSON (no markdown fences):
+{"sections":[{"title":"SECTION","points":["bullet"]}],"postCount":0,"note":"date range of posts"}`
       }]
     });
 
     if (data.error) throw new Error(data.error.message);
+    const text = (data.content ?? []).filter(b => b.type === 'text').map(b => b.text).join('');
+    if (!text) return null;
 
-    // Extract text from all text blocks in response
-    const text = (data.content ?? [])
-      .filter(b => b.type === 'text')
-      .map(b => b.text)
-      .join('');
-
-    if (!text) { console.warn('[trump] no text in response'); return null; }
-
-    // Try to extract JSON between markers first
-    const markerMatch = text.match(/JSONSTART([\s\S]*?)JSONEND/);
-    if (markerMatch) {
-      return JSON.parse(markerMatch[1].trim());
-    }
-
-    // Fallback: find any JSON with "sections" key
     const jsonMatch = text.match(/\{[\s\S]*?"sections"[\s\S]*?\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
-    }
+    if (jsonMatch) return JSON.parse(jsonMatch[0]);
 
-    // Last resort: build structure from the plain text response
-    console.warn('[trump] no JSON markers, building from text');
     const lines = text.split('\n').filter(l => l.trim().length > 20).slice(0, 6);
-    return {
-      sections: [{ title: "TODAY'S SUMMARY", points: lines }],
-      postCount: 0,
-      note: 'Structured JSON not returned — showing raw summary.'
-    };
+    return { sections: [{ title: "TODAY'S SUMMARY", points: lines }], postCount: 0, note: '' };
   } catch(e) {
-    console.warn('[trump claude]', e.message);
+    console.warn('[trump gemini]', e.message);
     return null;
   }
 }
@@ -2096,7 +2081,7 @@ Respond ONLY in JSON (no markdown fences):
 
   try {
     const data = await claudeCall({
-      model: 'claude-sonnet-4-20250514',
+      model: 'gemini-1.5-flash',
       max_tokens: 2000,
       messages: [{ role: 'user', content: prompt }]
     });
