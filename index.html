@@ -1337,6 +1337,8 @@ function recomputeBreadth() {
     breadthState.above200 = parseFloat((a200/tot*100).toFixed(1));
     breadthState.highs = hi;
     breadthState.lows  = lo;
+    renderBreadth();
+    const ts = document.getElementById('breadthTimestamp');
     if (ts) ts.textContent = tot + '/' + ALL_HOLDING_SYMS.length + ' computed';
   }
 }
