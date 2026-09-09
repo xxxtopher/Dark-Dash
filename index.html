@@ -609,7 +609,7 @@ async function claudeCall(body) {
     .join('\n');
 
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1762,7 +1762,7 @@ Respond ONLY in JSON (no markdown fences):
 
   try {
     const data = await claudeCall({
-      model: 'gemini-1.5-flash',
+      model: 'gemini-2.0-flash',
       max_tokens: 2000,
       messages: [{ role:'user', content: prompt }]
     });
@@ -1840,7 +1840,7 @@ async function loadTrumpViaClaude() {
   try {
     // Gemini doesn't support web_search tool — use knowledge-based prompt
     const data = await claudeCall({
-      model: 'gemini-1.5-flash',
+      model: 'gemini-2.0-flash',
       max_tokens: 2000,
       messages: [{
         role: 'user',
@@ -2081,7 +2081,7 @@ Respond ONLY in JSON (no markdown fences):
 
   try {
     const data = await claudeCall({
-      model: 'gemini-1.5-flash',
+      model: 'gemini-2.0-flash',
       max_tokens: 2000,
       messages: [{ role: 'user', content: prompt }]
     });
