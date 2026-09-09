@@ -1421,18 +1421,53 @@ const GH_REPO  = 'Dark-Dash';
 const GH_FILE  = 'breadth-history.json';
 
 async function ghReadFile(prompt_if_missing=false) {
-  const token = getGithubToken(prompt_if_missing);
-  if (!token || !GH_OWNER || !GH_REPO) return null;
+  if (!GH_OWNER || !GH_REPO) return null;
   try {
-    const res = await fetch(`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_FILE}`, {
-      headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github.v3+json' }
-    });
-    if (res.status === 404) return { rows: [], sha: null };
-    if (!res.ok) throw new Error('GH read HTTP ' + res.status);
-    const meta = await res.json();
-    const content = JSON.parse(atob(meta.content.replace(/\n/g,'')));
-    return { rows: content.rows ?? [], sha: meta.sha };
-  } catch(e) { console.warn('[gh read]', e.message); return null; }
+    // Try public raw URL first (no auth needed for public repos)
+    const rawUrl = `https://raw.githubusercontent.com/${GH_OWNER}/${GH_REPO}/main/${GH_FILE}`;
+    const res = await fetch(rawUrl + '?t=' + Date.now()); // cache-bust
+    if (res.status === 404) {
+      // File doesn't exist yet — return empty with sha from API if we have token
+      const token = getGithubToken(false);
+      if (token) {
+        const apiRes = await fetch(`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_FILE}`, {
+          headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github.v3+json' }
+        });
+        if (apiRes.status === 404) return { rows: [], sha: null };
+      }
+      return { rows: [], sha: null };
+    }
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const content = await res.json();
+    const rows = content.rows ?? [];
+    // Also fetch sha for writing (needs API + token)
+    let sha = null;
+    const token = getGithubToken(prompt_if_missing);
+    if (token) {
+      try {
+        const apiRes = await fetch(`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_FILE}`, {
+          headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github.v3+json' }
+        });
+        if (apiRes.ok) { const meta = await apiRes.json(); sha = meta.sha; }
+      } catch {}
+    }
+    return { rows, sha };
+  } catch(e) {
+    console.warn('[gh read]', e.message);
+    // Fallback: try authenticated API
+    const token = getGithubToken(prompt_if_missing);
+    if (!token) return null;
+    try {
+      const res = await fetch(`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_FILE}`, {
+        headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github.v3+json' }
+      });
+      if (res.status === 404) return { rows: [], sha: null };
+      if (!res.ok) throw new Error('GH API HTTP ' + res.status);
+      const meta = await res.json();
+      const content = JSON.parse(atob(meta.content.replace(/\n/g,'')));
+      return { rows: content.rows ?? [], sha: meta.sha };
+    } catch(e2) { console.warn('[gh read fallback]', e2.message); return null; }
+  }
 }
 
 async function ghWriteFile(rows, sha) {
