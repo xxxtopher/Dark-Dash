@@ -1828,9 +1828,61 @@ Respond ONLY in JSON (no markdown fences):
 
     if (data.error) throw new Error(data.error.message);
     const text = (data.content ?? []).filter(b=>b.type==='text').map(b=>b.text).join('');
-    const m = text.match(/\{[\s\S]*"sections"[\s\S]*\}/);
-    if (!m) throw new Error('No JSON in response');
-    const result = JSON.parse(m[0]);
+    if (!text) throw new Error('Empty response from Gemini');
+
+    // Try to extract JSON — Gemini sometimes wraps in ```json fences despite instructions
+    let result = null;
+    const attempts = [
+      // Strip markdown fences first
+      () => {
+        const stripped = text.replace(/```json\s*/g,'').replace(/```\s*/g,'').trim();
+        const m = stripped.match(/\{[\s\S]*"sections"[\s\S]*\}/);
+        return m ? JSON.parse(m[0]) : null;
+      },
+      // Raw match
+      () => {
+        const m = text.match(/\{[\s\S]*?"sections"[\s\S]*?\}/);
+        return m ? JSON.parse(m[0]) : null;
+      },
+      // Greedy match for larger JSON
+      () => {
+        const start = text.indexOf('{');
+        const end = text.lastIndexOf('}');
+        if (start >= 0 && end > start) return JSON.parse(text.slice(start, end+1));
+        return null;
+      }
+    ];
+
+    for (const attempt of attempts) {
+      try { result = attempt(); if (result?.sections) break; } catch {}
+    }
+
+    // If still no JSON, build structure from plain text paragraphs
+    if (!result?.sections) {
+      const lines = text.split('\n').filter(l => l.trim().length > 20);
+      const sections = [];
+      let current = null;
+      for (const line of lines) {
+        const trimmed = line.replace(/^#+\s*/, '').replace(/^\*+\s*/, '').trim();
+        if (trimmed.match(/^(MARKET BREADTH|MACRO|SECTOR|OVERALL|1\.|2\.|3\.|4\.)/i)) {
+          current = { title: trimmed.replace(/^\d+\.\s*/,'').toUpperCase(), points: [] };
+          sections.push(current);
+        } else if (current && trimmed.startsWith('-') || (current && trimmed.startsWith('•'))) {
+          current.points.push(trimmed.replace(/^[-•]\s*/,''));
+        } else if (current && current.points.length < 5 && trimmed.length > 30) {
+          current.points.push(trimmed);
+        }
+      }
+      if (sections.length > 0) {
+        result = { sections, verdict: lines[lines.length-1] ?? '' };
+      } else {
+        // Last resort — show raw text
+        result = {
+          sections: [{ title: 'MARKET ANALYSIS', points: lines.slice(0, 10) }],
+          verdict: ''
+        };
+      }
+    }
 
     // Render sections
     const bodyEl = document.getElementById('analysisBody');
@@ -1922,10 +1974,17 @@ Respond ONLY in valid JSON (no markdown fences):
     const text = (data.content ?? []).filter(b => b.type === 'text').map(b => b.text).join('');
     if (!text) return null;
 
-    const jsonMatch = text.match(/\{[\s\S]*?"sections"[\s\S]*?\}/);
-    if (jsonMatch) return JSON.parse(jsonMatch[0]);
+    // Try multiple extraction strategies
+    for (const attempt of [
+      () => { const t = text.replace(/```json\s*/g,'').replace(/```\s*/g,'').trim(); const m = t.match(/\{[\s\S]*?"sections"[\s\S]*?\}/); return m ? JSON.parse(m[0]) : null; },
+      () => { const m = text.match(/\{[\s\S]*?"sections"[\s\S]*?\}/); return m ? JSON.parse(m[0]) : null; },
+      () => { const s=text.indexOf('{'), e=text.lastIndexOf('}'); return s>=0&&e>s ? JSON.parse(text.slice(s,e+1)) : null; }
+    ]) {
+      try { const r = attempt(); if (r?.sections) return r; } catch {}
+    }
 
-    const lines = text.split('\n').filter(l => l.trim().length > 20).slice(0, 6);
+    // Plain text fallback
+    const lines = text.split('\n').filter(l => l.trim().length > 20).slice(0, 8);
     return { sections: [{ title: "TODAY'S SUMMARY", points: lines }], postCount: 0, note: '' };
   } catch(e) {
     console.warn('[trump gemini]', e.message);
