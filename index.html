@@ -1036,6 +1036,8 @@ const TRENDS_DATA = [
   {Date:'2026-09-04',COM:50,CND:21,CNS:31,ENE:76,FIN:57,HLT:51,IND:10,MAT:27,REI:14,TEC:47,UTL:29,BRD:38},
   {Date:'2026-09-08',COM:36,CND:15,CNS:22,ENE:86,FIN:19,HLT:31,IND:10,MAT:27,REI:14,TEC:40,UTL:45,BRD:31},
   {Date:'2026-09-09',COM:18,CND:10,CNS:14,ENE:86,FIN:13,HLT:27,IND:5,MAT:27,REI:7,TEC:39,UTL:29,BRD:25},
+  {Date:'2026-09-11',COM:36,CND:15,CNS:17,ENE:57,FIN:20,HLT:22,IND:18,MAT:23,REI:7,TEC:50,UTL:16,BRD:26},
+  {Date:'2026-09-10',COM:23,CND:10,CNS:14,ENE:81,FIN:15,HLT:15,IND:15,MAT:3,REI:11,TEC:62,UTL:25,BRD:20},
 ];
 
 let trendsVisible = false;
@@ -1259,32 +1261,41 @@ async function loadTrends() {
   const ts = document.getElementById('trendsTs');
   ts.textContent = 'Loading live data…';
 
-  // Check localStorage cache (valid for today)
-  const today = new Date().toISOString().slice(0,10);
-  const cached = (() => { try { return JSON.parse(localStorage.getItem('tl_breadth_v5') || '{}'); } catch { return {}; } })();
+  // Cache key includes today's date AND whether it's past 4pm ET (market close)
+  // This ensures we re-fetch after new data is posted each day
+  const now = new Date();
+  const etHour = parseInt(now.toLocaleString('en-US', {timeZone:'America/New_York', hour:'numeric', hour12:false}));
+  const today  = now.toISOString().slice(0,10);
+  const cacheSlot = today + (etHour >= 16 ? '-post' : '-pre'); // different slot before/after 4pm ET
 
-  if (cached.date === today && cached.rows?.length) {
+  const CACHE_KEY = 'tl_breadth_v6';
+  const cached = (() => { try { return JSON.parse(localStorage.getItem(CACHE_KEY) || '{}'); } catch { return {}; } })();
+
+  if (cached.slot === cacheSlot && cached.rows?.length) {
     liveData = cached.rows;
-    ts.textContent = cached.rows.length + ' trading days · live · trading-logic.com · cached today';
+    const latest = cached.rows[cached.rows.length-1]?.Date ?? '';
+    ts.textContent = cached.rows.length + ' trading days · latest: ' + latest + ' · cached';
     requestAnimationFrame(() => { drawTrendsChart(); setupTrendsInteraction(); renderTrendsMomentum(); });
     return;
   }
 
-  // Fetch live
+  // Fetch live from Trading Logic via Cloudflare Worker
   try {
     const html = await fetchTradingLogic();
     const rows = parseTradingLogic(html);
     if (rows.length > 10) {
       liveData = rows;
-      localStorage.setItem('tl_breadth_v5', JSON.stringify({ date: today, rows }));
-      ts.textContent = rows.length + ' trading days · live · trading-logic.com · updated ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ slot: cacheSlot, rows }));
+      const latest = rows[rows.length-1]?.Date ?? '';
+      ts.textContent = rows.length + ' trading days · latest: ' + latest + ' · live · updated ' + now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
     } else {
-      throw new Error('too few rows: ' + rows.length);
+      throw new Error('too few rows parsed: ' + rows.length);
     }
   } catch(e) {
     console.warn('[trends fetch]', e.message);
     liveData = null;
-    ts.textContent = TRENDS_DATA.length + ' trading days · static fallback · trading-logic.com';
+    const latest = TRENDS_DATA[TRENDS_DATA.length-1]?.Date ?? '';
+    ts.textContent = TRENDS_DATA.length + ' days · latest: ' + latest + ' · static fallback (live fetch failed)';
   }
 
   requestAnimationFrame(() => { drawTrendsChart(); setupTrendsInteraction(); renderTrendsMomentum(); });
