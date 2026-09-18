@@ -940,14 +940,6 @@ const SECTOR_COLS = [
 
 // Pre-parsed from trading-logic.com — [Date, COM, CND, CNS, ENE, FIN, HLT, IND, MAT, REI, TEC, UTL, Breadth/11]
 const TRENDS_DATA = [
-  {Date:'2026-04-23',COM:68,CND:71,CNS:69,ENE:24,FIN:84,HLT:39,IND:70,MAT:58,REI:90,TEC:74,UTL:45,BRD:63},
-  {Date:'2026-04-24',COM:55,CND:73,CNS:56,ENE:38,FIN:69,HLT:29,IND:65,MAT:46,REI:93,TEC:76,UTL:29,BRD:57},
-  {Date:'2026-04-27',COM:55,CND:56,CNS:47,ENE:33,FIN:72,HLT:34,IND:59,MAT:46,REI:79,TEC:73,UTL:29,BRD:53},
-  {Date:'2026-04-28',COM:59,CND:40,CNS:56,ENE:71,FIN:75,HLT:27,IND:54,MAT:31,REI:90,TEC:71,UTL:45,BRD:56},
-  {Date:'2026-04-29',COM:50,CND:29,CNS:44,ENE:95,FIN:57,HLT:22,IND:54,MAT:35,REI:69,TEC:67,UTL:19,BRD:49},
-  {Date:'2026-04-30',COM:59,CND:38,CNS:64,ENE:100,FIN:68,HLT:25,IND:56,MAT:42,REI:79,TEC:74,UTL:68,BRD:61},
-  {Date:'2026-05-01',COM:64,CND:31,CNS:61,ENE:95,FIN:63,HLT:25,IND:52,MAT:38,REI:76,TEC:76,UTL:58,BRD:58},
-  {Date:'2026-05-04',COM:45,CND:19,CNS:39,ENE:100,FIN:43,HLT:25,IND:37,MAT:35,REI:62,TEC:74,UTL:48,BRD:48},
   {Date:'2026-05-05',COM:41,CND:19,CNS:47,ENE:100,FIN:48,HLT:37,IND:44,MAT:38,REI:52,TEC:74,UTL:39,BRD:49},
   {Date:'2026-05-06',COM:55,CND:33,CNS:56,ENE:38,FIN:49,HLT:39,IND:56,MAT:54,REI:86,TEC:74,UTL:16,BRD:51},
   {Date:'2026-05-07',COM:45,CND:27,CNS:56,ENE:19,FIN:35,HLT:39,IND:47,MAT:35,REI:72,TEC:77,UTL:13,BRD:42},
@@ -956,30 +948,30 @@ const TRENDS_DATA = [
   {Date:'2026-05-12',COM:55,CND:10,CNS:47,ENE:57,FIN:36,HLT:39,IND:39,MAT:58,REI:66,TEC:69,UTL:26,BRD:46},
   {Date:'2026-05-13',COM:50,CND:10,CNS:47,ENE:62,FIN:35,HLT:37,IND:38,MAT:54,REI:45,TEC:64,UTL:23,BRD:42},
   {Date:'2026-05-14',COM:36,CND:12,CNS:42,ENE:57,FIN:40,HLT:36,IND:39,MAT:46,REI:41,TEC:66,UTL:26,BRD:40},
-  {Date:'2026-05-15',COM:32,CND:10,CNS:42,ENE:81,FIN:35,HLT:34,IND:29,MAT:27,REI:24,TEC:67,UTL:33,BRD:35},
+  {Date:'2026-05-15',COM:32,CND:10,CNS:42,ENE:81,FIN:35,HLT:34,IND:29,MAT:27,REI:24,TEC:67,UTL:33,BRD:8},
   {Date:'2026-05-18',COM:36,CND:12,CNS:50,ENE:90,FIN:52,HLT:44,IND:34,MAT:19,REI:52,TEC:73,UTL:16,BRD:43},
-  {Date:'2026-05-19',COM:45,CND:17,CNS:53,ENE:90,FIN:39,HLT:42,IND:19,MAT:84,REI:86,TEC:12,UTL:94,BRD:41},
+  {Date:'2026-05-19',COM:45,CND:17,CNS:53,ENE:90,FIN:39,HLT:42,IND:19,MAT:84,REI:86,TEC:12,UTL:94,BRD:5},
   {Date:'2026-05-20',COM:41,CND:27,CNS:61,ENE:90,FIN:47,HLT:53,IND:30,MAT:12,REI:66,TEC:73,UTL:26,BRD:48},
   {Date:'2026-05-21',COM:36,CND:42,CNS:67,ENE:67,FIN:51,HLT:61,IND:32,MAT:27,REI:79,TEC:69,UTL:45,BRD:52},
   {Date:'2026-05-22',COM:18,CND:50,CNS:72,ENE:76,FIN:61,HLT:68,IND:39,MAT:31,REI:79,TEC:77,UTL:77,BRD:59},
   {Date:'2026-05-26',COM:27,CND:54,CNS:53,ENE:29,FIN:65,HLT:64,IND:51,MAT:50,REI:83,TEC:83,UTL:74,BRD:58},
   {Date:'2026-05-27',COM:45,CND:60,CNS:64,ENE:10,FIN:48,HLT:54,IND:48,MAT:46,REI:76,TEC:76,UTL:71,BRD:54},
   {Date:'2026-05-28',COM:41,CND:67,CNS:64,ENE:10,FIN:39,HLT:68,IND:52,MAT:46,REI:66,TEC:81,UTL:29,BRD:51},
-  {Date:'2026-05-29',COM:23,CND:62,CNS:44,ENE:54,FIN:56,HLT:14,IND:95,MAT:45,REI:57,TEC:62,UTL:34,BRD:45},
+  {Date:'2026-05-29',COM:23,CND:62,CNS:44,ENE:54,FIN:56,HLT:14,IND:95,MAT:45,REI:57,TEC:62,UTL:34,BRD:9},
   {Date:'2026-06-01',COM:55,CND:62,CNS:42,ENE:24,FIN:43,HLT:49,IND:42,MAT:35,REI:34,TEC:84,UTL:13,BRD:44},
   {Date:'2026-06-02',COM:41,CND:56,CNS:22,ENE:43,FIN:47,HLT:42,IND:59,MAT:46,REI:48,TEC:89,UTL:29,BRD:47},
-  {Date:'2026-06-03',COM:95,CND:42,CNS:86,ENE:22,FIN:85,HLT:66,IND:14,MAT:65,REI:98,TEC:12,UTL:65,BRD:46},
+  {Date:'2026-06-03',COM:95,CND:42,CNS:86,ENE:22,FIN:85,HLT:66,IND:14,MAT:65,REI:98,TEC:12,UTL:65,BRD:1},
   {Date:'2026-06-04',COM:36,CND:58,CNS:25,ENE:71,FIN:59,HLT:75,IND:73,MAT:50,REI:76,TEC:76,UTL:39,BRD:58},
   {Date:'2026-06-05',COM:27,CND:65,CNS:53,ENE:24,FIN:63,HLT:81,IND:67,MAT:46,REI:76,TEC:56,UTL:74,BRD:57},
   {Date:'2026-06-08',COM:27,CND:62,CNS:56,ENE:38,FIN:59,HLT:75,IND:59,MAT:27,REI:69,TEC:57,UTL:23,BRD:50},
   {Date:'2026-06-09',COM:27,CND:73,CNS:67,ENE:14,FIN:72,HLT:81,IND:78,MAT:54,REI:79,TEC:44,UTL:71,BRD:60},
   {Date:'2026-06-10',COM:32,CND:60,CNS:81,ENE:48,FIN:67,HLT:78,IND:46,MAT:27,REI:86,TEC:29,UTL:74,BRD:57},
   {Date:'2026-06-11',COM:27,CND:73,CNS:75,ENE:14,FIN:67,HLT:81,IND:72,MAT:65,REI:83,TEC:46,UTL:71,BRD:61},
-  {Date:'2026-06-12',COM:45,CND:77,CNS:86,ENE:29,FIN:77,HLT:81,IND:76,MAT:77,REI:78,TEC:64,UTL:78,BRD:74},
-  {Date:'2026-06-15',COM:36,CND:81,CNS:78,ENE:0,FIN:79,HLT:76,IND:81,MAT:81,REI:72,TEC:54,UTL:87,BRD:66},
-  {Date:'2026-06-16',COM:32,CND:75,CNS:78,ENE:0,FIN:87,HLT:18,IND:57,MAT:37,REI:63,TEC:99,UTL:0,BRD:64},
-  {Date:'2026-06-17',COM:14,CND:60,CNS:39,ENE:0,FIN:79,HLT:47,IND:67,MAT:81,REI:31,TEC:34,UTL:58,BRD:46},
-  {Date:'2026-06-18',COM:18,CND:62,CNS:42,ENE:56,FIN:73,HLT:96,IND:56,MAT:93,REI:84,TEC:17,UTL:45,BRD:47},
+  {Date:'2026-06-12',COM:45,CND:77,CNS:86,ENE:29,FIN:77,HLT:81,IND:76,MAT:77,REI:86,TEC:47,UTL:81,BRD:69},
+  {Date:'2026-06-15',COM:36,CND:81,CNS:78,ENE:79,FIN:76,HLT:81,IND:81,MAT:72,REI:54,TEC:87,UTL:72,BRD:0},
+  {Date:'2026-06-16',COM:32,CND:75,CNS:78,ENE:88,FIN:71,HLT:85,IND:73,MAT:76,REI:39,TEC:90,UTL:70,BRD:1},
+  {Date:'2026-06-17',COM:14,CND:60,CNS:39,ENE:79,FIN:47,HLT:67,IND:81,MAT:31,REI:34,TEC:58,UTL:51,BRD:0},
+  {Date:'2026-06-18',COM:18,CND:62,CNS:42,ENE:56,FIN:73,HLT:96,IND:56,MAT:93,REI:84,TEC:17,UTL:45,BRD:2},
   {Date:'2026-06-22',COM:18,CND:50,CNS:33,ENE:10,FIN:69,HLT:39,IND:67,MAT:65,REI:45,TEC:41,UTL:90,BRD:48},
   {Date:'2026-06-23',COM:27,CND:50,CNS:64,ENE:19,FIN:71,HLT:56,IND:52,MAT:58,REI:69,TEC:29,UTL:100,BRD:54},
   {Date:'2026-06-24',COM:23,CND:62,CNS:78,ENE:14,FIN:68,HLT:76,IND:62,MAT:58,REI:76,TEC:30,UTL:100,BRD:59},
@@ -1012,7 +1004,7 @@ const TRENDS_DATA = [
   {Date:'2026-08-03',COM:68,CND:67,CNS:64,ENE:71,FIN:69,HLT:68,IND:59,MAT:62,REI:48,TEC:61,UTL:10,BRD:59},
   {Date:'2026-08-04',COM:77,CND:65,CNS:75,ENE:62,FIN:76,HLT:68,IND:77,MAT:77,REI:52,TEC:80,UTL:10,BRD:65},
   {Date:'2026-08-05',COM:73,CND:75,CNS:69,ENE:29,FIN:77,HLT:78,IND:76,MAT:65,REI:41,TEC:69,UTL:10,BRD:60},
-  {Date:'2026-08-06',COM:77,CND:69,CNS:61,ENE:48,FIN:72,HLT:75,IND:71,MAT:73,REI:38,TEC:69,UTL:66,BRD:60},
+  {Date:'2026-08-06',COM:77,CND:69,CNS:61,ENE:48,FIN:72,HLT:75,IND:71,MAT:73,REI:38,TEC:69,UTL:66,BRD:5},
   {Date:'2026-08-07',COM:82,CND:71,CNS:67,ENE:38,FIN:67,HLT:81,IND:70,MAT:77,REI:45,TEC:76,UTL:10,BRD:62},
   {Date:'2026-08-10',COM:82,CND:65,CNS:58,ENE:81,FIN:63,HLT:85,IND:67,MAT:85,REI:24,TEC:71,UTL:10,BRD:63},
   {Date:'2026-08-11',COM:73,CND:69,CNS:58,ENE:81,FIN:67,HLT:80,IND:68,MAT:81,REI:21,TEC:74,UTL:10,BRD:62},
@@ -1035,9 +1027,10 @@ const TRENDS_DATA = [
   {Date:'2026-09-03',COM:68,CND:29,CNS:36,ENE:95,FIN:77,HLT:66,IND:16,MAT:38,REI:24,TEC:47,UTL:45,BRD:49},
   {Date:'2026-09-04',COM:50,CND:21,CNS:31,ENE:76,FIN:57,HLT:51,IND:10,MAT:27,REI:14,TEC:47,UTL:29,BRD:38},
   {Date:'2026-09-08',COM:36,CND:15,CNS:22,ENE:86,FIN:19,HLT:31,IND:10,MAT:27,REI:14,TEC:40,UTL:45,BRD:31},
-  {Date:'2026-09-09',COM:18,CND:10,CNS:14,ENE:86,FIN:13,HLT:27,IND:5,MAT:27,REI:7,TEC:39,UTL:29,BRD:25},
-  {Date:'2026-09-10',COM:23,CND:10,CNS:14,ENE:81,FIN:15,HLT:15,IND:15,MAT:3,REI:11,TEC:62,UTL:25,BRD:20},
-  {Date:'2026-09-11',COM:36,CND:15,CNS:17,ENE:57,FIN:20,HLT:22,IND:18,MAT:23,REI:7,TEC:50,UTL:16,BRD:26},
+  {Date:'2026-09-09',COM:18,CND:10,CNS:14,ENE:86,FIN:13,HLT:27,IND:52,MAT:77,REI:39,TEC:29,UTL:27,BRD:0},
+  {Date:'2026-09-10',COM:23,CND:10,CNS:14,ENE:81,FIN:15,HLT:15,IND:51,MAT:50,REI:31,TEC:16,UTL:22,BRD:0},
+  {Date:'2026-09-11',COM:32,CND:81,CNS:96,ENE:72,FIN:12,HLT:21,IND:52,MAT:37,REI:53,TEC:13,UTL:28,BRD:0},
+  {Date:'2026-09-14',COM:31,CND:7,CNS:25,ENE:57,FIN:31,HLT:34,IND:9,MAT:8,REI:74,TEC:66,UTL:3,BRD:28},
 ];
 
 let trendsVisible = false;
@@ -1177,70 +1170,50 @@ function toggleSector(key) {
 window.toggleSector = toggleSector;
 
 // Parse Trading Logic breadth table
-// Page text contains rows: YYYY-MM-DD SPX COM CND CNS ENE FIN HLT IND MAT REI TEC UTL Breadth
-// The markdown extraction gives us space-separated values - much easier to parse
+// The page embeds data as JSON: {"breadthData":[{"Date":"YYYY-MM-DD","SPX":n,"COM":n,...,"Breadth":n},...]
 function parseTradingLogic(html) {
   const rows = [];
   const seen = new Set();
 
-  // Strategy 1: space-separated rows (works when worker returns clean text)
-  const spaceRe = /(\d{4}-\d{2}-\d{2})\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)/g;
-  let m;
-  while ((m = spaceRe.exec(html)) !== null) {
-    const date = m[1];
-    if (seen.has(date)) continue;
-    const nums = m.slice(2).map(Number); // SPX, COM, CND, CNS, ENE, FIN, HLT, IND, MAT, REI, TEC, UTL, BRD
-    if (nums.length < 13) continue;
-    const sectors = nums.slice(1, 12);
-    if (new Set(sectors).size <= 1) continue;
-    seen.add(date);
-    rows.push({
-      Date: date,
-      COM: nums[1], CND: nums[2],  CNS: nums[3],  ENE: nums[4],
-      FIN: nums[5], HLT: nums[6],  IND: nums[7],  MAT: nums[8],
-      REI: nums[9], TEC: nums[10], UTL: nums[11],
-      BRD: Math.round(nums[12] / 11)
-    });
-  }
-
-  if (rows.length > 5) {
-    return rows.sort((a,b) => a.Date.localeCompare(b.Date)).slice(-90);
-  }
-
-  // Strategy 2: packed format fallback (old approach)
-  const packRe = /(\d{4}-\d{2}-\d{2})(\d{10,}?)(?=\d{4}-\d{2}-\d{2}|$)/g;
-  while ((m = packRe.exec(html)) !== null) {
-    const date = m[1];
-    if (seen.has(date)) continue;
-    const s = m[2];
-    const nums = [];
-    let i = 0;
-    for (let f = 0; f < 13; f++) {
-      if (i >= s.length) break;
-      if (f < 12) {
-        let placed = false;
-        for (const len of [3, 2, 1]) {
-          if (i + len <= s.length) {
-            const v = parseInt(s.slice(i, i+len));
-            if (v <= 100) { nums.push(v); i += len; placed = true; break; }
-          }
-        }
-        if (!placed) break;
-      } else {
-        const rest = s.slice(i);
-        if (rest) nums.push(parseInt(rest));
+  // Strategy 1: extract JSON breadthData array (primary — confirmed working)
+  try {
+    const m = html.match(/"breadthData":\s*(\[\{[\s\S]*?\}\])/);
+    if (m) {
+      const arr = JSON.parse(m[1]);
+      for (const r of arr) {
+        if (!r.Date || seen.has(r.Date)) continue;
+        // Skip rows with no sector data
+        const sectors = [r.COM,r.CND,r.CNS,r.ENE,r.FIN,r.HLT,r.IND,r.MAT,r.REI,r.TEC,r.UTL];
+        if (sectors.every(v => v == null || v === 0)) continue;
+        seen.add(r.Date);
+        rows.push({
+          Date: r.Date,
+          COM:  r.COM  ?? 0, CND: r.CND ?? 0, CNS: r.CNS ?? 0,
+          ENE:  r.ENE  ?? 0, FIN: r.FIN ?? 0, HLT: r.HLT ?? 0,
+          IND:  r.IND  ?? 0, MAT: r.MAT ?? 0, REI: r.REI ?? 0,
+          TEC:  r.TEC  ?? 0, UTL: r.UTL ?? 0,
+          BRD:  Math.round((r.Breadth ?? 0) / 11)
+        });
+      }
+      if (rows.length > 10) {
+        return rows.sort((a,b) => a.Date.localeCompare(b.Date)).slice(-90);
       }
     }
-    if (nums.length < 13) continue;
-    const sectors = nums.slice(1,12);
-    if (new Set(sectors).size <= 2) continue;
+  } catch(e) { console.warn('[trends json parse]', e.message); }
+
+  // Strategy 2: individual JSON objects (fallback)
+  const objRe = /\{"Date":"(\d{4}-\d{2}-\d{2})","SPX":(\d+),"COM":(\d+),"CND":(\d+),"CNS":(\d+),"ENE":(\d+),"FIN":(\d+),"HLT":(\d+),"IND":(\d+),"MAT":(\d+),"REI":(\d+),"TEC":(\d+),"UTL":(\d+),"Breadth":(\d+)/g;
+  let m2;
+  while ((m2 = objRe.exec(html)) !== null) {
+    const date = m2[1];
+    if (seen.has(date)) continue;
     seen.add(date);
+    const nums = m2.slice(2).map(Number);
     rows.push({
-      Date: date,
-      COM: nums[1], CND: nums[2],  CNS: nums[3],  ENE: nums[4],
-      FIN: nums[5], HLT: nums[6],  IND: nums[7],  MAT: nums[8],
-      REI: nums[9], TEC: nums[10], UTL: nums[11],
-      BRD: Math.round(nums[12] / 11)
+      Date: date, COM: nums[1], CND: nums[2], CNS: nums[3],
+      ENE:  nums[4], FIN: nums[5], HLT: nums[6], IND: nums[7],
+      MAT:  nums[8], REI: nums[9], TEC: nums[10], UTL: nums[11],
+      BRD:  Math.round(nums[12] / 11)
     });
   }
 
@@ -1248,10 +1221,15 @@ function parseTradingLogic(html) {
 }
 
 async function fetchTradingLogic() {
-  const res = await fetch(`${WORKER_URL}?url=${encodeURIComponent('https://www.trading-logic.com/en')}`,
-    { signal: AbortSignal.timeout(15000) });
+  // Try fetching via worker — Trading Logic must be in worker allowlist
+  const url = 'https://www.trading-logic.com/en';
+  const res = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url)}`, {
+    signal: AbortSignal.timeout(15000)
+  });
   if (!res.ok) throw new Error('HTTP ' + res.status);
-  return res.text();
+  const text = await res.text();
+  if (!text || text.length < 500) throw new Error('Response too short: ' + text.length);
+  return text;
 }
 
 let liveData = null; // populated from fetch, overrides static TRENDS_DATA
@@ -1268,7 +1246,7 @@ async function loadTrends() {
   const today  = now.toISOString().slice(0,10);
   const cacheSlot = today + (etHour >= 16 ? '-post' : '-pre'); // different slot before/after 4pm ET
 
-  const CACHE_KEY = 'tl_breadth_v6';
+  const CACHE_KEY = 'tl_breadth_v9';
   const cached = (() => { try { return JSON.parse(localStorage.getItem(CACHE_KEY) || '{}'); } catch { return {}; } })();
 
   if (cached.slot === cacheSlot && cached.rows?.length) {
