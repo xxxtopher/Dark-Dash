@@ -1170,51 +1170,54 @@ function toggleSector(key) {
 window.toggleSector = toggleSector;
 
 // Parse Trading Logic breadth table
-// The page embeds data as JSON: {"breadthData":[{"Date":"YYYY-MM-DD","SPX":n,"COM":n,...,"Breadth":n},...]
+// Data is embedded as JSON inside a JS string: \"breadthData\":[{\"Date\":\"YYYY-MM-DD\",...}]
+// The worker returns raw HTML so the JSON may be escaped with \" or unescaped
 function parseTradingLogic(html) {
   const rows = [];
   const seen = new Set();
 
-  // Strategy 1: extract JSON breadthData array (primary — confirmed working)
-  try {
-    const m = html.match(/"breadthData":\s*(\[\{[\s\S]*?\}\])/);
-    if (m) {
-      const arr = JSON.parse(m[1]);
+  // Unescape \" to " so we can parse the JSON
+  const unescaped = html.replace(/\\"/g, '"');
+
+  // Try both escaped and unescaped versions
+  for (const src of [unescaped, html]) {
+    try {
+      const m = src.match(/"breadthData":\s*(\[\{[\s\S]*?\}\])/);
+      if (!m) continue;
+      // Clean up any remaining escape sequences
+      const jsonStr = m[1].replace(/\\"/g, '"').replace(/\\n/g,'').replace(/\\t/g,'');
+      const arr = JSON.parse(jsonStr);
       for (const r of arr) {
         if (!r.Date || seen.has(r.Date)) continue;
-        // Skip rows with no sector data
         const sectors = [r.COM,r.CND,r.CNS,r.ENE,r.FIN,r.HLT,r.IND,r.MAT,r.REI,r.TEC,r.UTL];
         if (sectors.every(v => v == null || v === 0)) continue;
         seen.add(r.Date);
         rows.push({
           Date: r.Date,
-          COM:  r.COM  ?? 0, CND: r.CND ?? 0, CNS: r.CNS ?? 0,
-          ENE:  r.ENE  ?? 0, FIN: r.FIN ?? 0, HLT: r.HLT ?? 0,
-          IND:  r.IND  ?? 0, MAT: r.MAT ?? 0, REI: r.REI ?? 0,
-          TEC:  r.TEC  ?? 0, UTL: r.UTL ?? 0,
-          BRD:  Math.round((r.Breadth ?? 0) / 11)
+          COM: r.COM??0, CND: r.CND??0, CNS: r.CNS??0,
+          ENE: r.ENE??0, FIN: r.FIN??0, HLT: r.HLT??0,
+          IND: r.IND??0, MAT: r.MAT??0, REI: r.REI??0,
+          TEC: r.TEC??0, UTL: r.UTL??0,
+          BRD: Math.round((r.Breadth??0) / 11)
         });
       }
-      if (rows.length > 10) {
-        return rows.sort((a,b) => a.Date.localeCompare(b.Date)).slice(-90);
-      }
-    }
-  } catch(e) { console.warn('[trends json parse]', e.message); }
+      if (rows.length > 10) break;
+    } catch(e) { console.warn('[trends parse attempt]', e.message?.slice(0,80)); }
+  }
 
-  // Strategy 2: individual JSON objects (fallback)
-  const objRe = /\{"Date":"(\d{4}-\d{2}-\d{2})","SPX":(\d+),"COM":(\d+),"CND":(\d+),"CNS":(\d+),"ENE":(\d+),"FIN":(\d+),"HLT":(\d+),"IND":(\d+),"MAT":(\d+),"REI":(\d+),"TEC":(\d+),"UTL":(\d+),"Breadth":(\d+)/g;
+  if (rows.length > 10) {
+    return rows.sort((a,b) => a.Date.localeCompare(b.Date)).slice(-90);
+  }
+
+  // Fallback: regex per object — handles escaped JSON
+  const objRe = /"Date":"(\d{4}-\d{2}-\d{2})","SPX":(\d+),"COM":(\d+),"CND":(\d+),"CNS":(\d+),"ENE":(\d+),"FIN":(\d+),"HLT":(\d+),"IND":(\d+),"MAT":(\d+),"REI":(\d+),"TEC":(\d+),"UTL":(\d+),"Breadth":(\d+)/g;
   let m2;
-  while ((m2 = objRe.exec(html)) !== null) {
+  while ((m2 = objRe.exec(unescaped)) !== null) {
     const date = m2[1];
     if (seen.has(date)) continue;
     seen.add(date);
-    const nums = m2.slice(2).map(Number);
-    rows.push({
-      Date: date, COM: nums[1], CND: nums[2], CNS: nums[3],
-      ENE:  nums[4], FIN: nums[5], HLT: nums[6], IND: nums[7],
-      MAT:  nums[8], REI: nums[9], TEC: nums[10], UTL: nums[11],
-      BRD:  Math.round(nums[12] / 11)
-    });
+    const n = m2.slice(2).map(Number);
+    rows.push({ Date:date, COM:n[1], CND:n[2], CNS:n[3], ENE:n[4], FIN:n[5], HLT:n[6], IND:n[7], MAT:n[8], REI:n[9], TEC:n[10], UTL:n[11], BRD:Math.round(n[12]/11) });
   }
 
   return rows.sort((a,b) => a.Date.localeCompare(b.Date)).slice(-90);
@@ -1246,7 +1249,7 @@ async function loadTrends() {
   const today  = now.toISOString().slice(0,10);
   const cacheSlot = today + (etHour >= 16 ? '-post' : '-pre'); // different slot before/after 4pm ET
 
-  const CACHE_KEY = 'tl_breadth_v9';
+  const CACHE_KEY = 'tl_breadth_v10';
   const cached = (() => { try { return JSON.parse(localStorage.getItem(CACHE_KEY) || '{}'); } catch { return {}; } })();
 
   if (cached.slot === cacheSlot && cached.rows?.length) {
