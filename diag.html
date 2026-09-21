@@ -1,74 +1,69 @@
 <!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><title>Trading Logic Fetch Diagnostic</title>
+<head><meta charset="UTF-8"><title>Trading Logic Diagnostic v2</title>
 <style>body{background:#0d1117;color:#c8d8e8;font-family:monospace;padding:20px;font-size:12px}
 .ok{color:#00e676}.fail{color:#ff4444}.warn{color:#ffd700}
 button{background:#1e2a38;color:#c8d8e8;border:1px solid #253040;padding:8px 16px;cursor:pointer;font-family:monospace;margin:4px;font-size:12px}
-pre{background:#131920;padding:8px;border-radius:4px;white-space:pre-wrap;word-break:break-all;font-size:10px;max-height:400px;overflow-y:auto}
+pre{background:#131920;padding:8px;border-radius:4px;white-space:pre-wrap;word-break:break-all;font-size:10px;max-height:300px;overflow-y:auto}
 </style></head>
 <body>
-<h2 style="color:#818cf8">Trading Logic Live Fetch Diagnostic</h2>
-<button onclick="testFetch()">1. Test fetch via worker</button>
-<button onclick="testParse()">2. Parse dates from response</button>
-<button onclick="clearCache()">3. Clear cache (force re-fetch)</button>
+<h2 style="color:#818cf8">Trading Logic Diagnostic v2 — JSON parser</h2>
+<button onclick="testAll()">Run all tests</button>
+<button onclick="clearCache()">Clear cache</button>
 <div id="out"></div>
 <script>
 const WORKER = 'https://yahoo-proxy.topherho.workers.dev';
 const log = (msg, cls='') => { document.getElementById('out').innerHTML += '<div class="'+cls+'">'+msg+'</div>'; };
-const logPre = (label, txt) => { document.getElementById('out').innerHTML += '<div style="color:#6a8aa0;margin-top:6px">'+label+'</div><pre>'+String(txt).replace(/</g,'&lt;').slice(0,3000)+'</pre>'; };
+const logPre = (label, txt) => { document.getElementById('out').innerHTML += '<div style="color:#6a8aa0;margin-top:4px">'+label+'</div><pre>'+String(txt).replace(/</g,'&lt;').slice(0,2000)+'</pre>'; };
 
-async function testFetch() {
-  log('<br>--- Fetching Trading Logic via worker ---');
+function parseTradingLogic(html) {
+  const rows = [], seen = new Set();
+  try {
+    const m = html.match(/"breadthData":\s*(\[\{[\s\S]*?\}\])/);
+    if (m) {
+      const arr = JSON.parse(m[1]);
+      for (const r of arr) {
+        if (!r.Date || seen.has(r.Date)) continue;
+        const sectors = [r.COM,r.CND,r.CNS,r.ENE,r.FIN,r.HLT,r.IND,r.MAT,r.REI,r.TEC,r.UTL];
+        if (sectors.every(v => v == null || v === 0)) continue;
+        seen.add(r.Date);
+        rows.push({ Date:r.Date, TEC:r.TEC??0, BRD:Math.round((r.Breadth??0)/11) });
+      }
+    }
+  } catch(e) { log('JSON parse error: '+e.message,'fail'); }
+  return rows.sort((a,b)=>a.Date.localeCompare(b.Date));
+}
+
+async function testAll() {
+  document.getElementById('out').innerHTML = '';
+  log('Fetching Trading Logic...');
   try {
     const t0 = Date.now();
     const res = await fetch(`${WORKER}?url=${encodeURIComponent('https://www.trading-logic.com/en')}`,
       {signal: AbortSignal.timeout(15000)});
-    const text = await res.text();
-    const ms = Date.now() - t0;
-    log(`Status: ${res.status}, Size: ${text.length} bytes, Time: ${ms}ms`, res.ok ? 'ok' : 'fail');
-    if (text.length < 500) { log('Response too short!', 'fail'); logPre('Response:', text); return; }
-    // Count date occurrences
-    const dates = [...text.matchAll(/\d{4}-\d{2}-\d{2}/g)].map(m=>m[0]);
-    log(`Date strings found: ${dates.length}`, dates.length > 50 ? 'ok' : 'warn');
-    log(`Unique dates: ${[...new Set(dates)].sort().slice(-10).join(', ')}`);
-    // Check for space-separated pattern
-    const spaceRows = [...text.matchAll(/\d{4}-\d{2}-\d{2}\s+\d+\s+\d+\s+\d+/g)];
-    log(`Space-separated rows found: ${spaceRows.length}`, spaceRows.length > 10 ? 'ok' : 'warn');
-    // Show first 1000 chars around first date
-    const idx = text.search(/\d{4}-\d{2}-\d{2}/);
-    if (idx >= 0) logPre('Context around first date:', text.slice(Math.max(0,idx-50), idx+500));
-    window._tlHtml = text;
-  } catch(e) { log('✗ Error: ' + e.message, 'fail'); }
-}
+    const html = await res.text();
+    log(`✓ Got ${html.length} bytes in ${Date.now()-t0}ms`, 'ok');
 
-async function testParse() {
-  log('<br>--- Parsing dates ---');
-  const html = window._tlHtml;
-  if (!html) { log('Run test 1 first', 'warn'); return; }
-
-  const rows = [];
-  // Space-separated
-  const spaceRe = /(\d{4}-\d{2}-\d{2})\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)/g;
-  let m;
-  while ((m = spaceRe.exec(html)) !== null) {
-    rows.push({date: m[1], TEC: parseInt(m[12]), BRD: Math.round(parseInt(m[14])/11)});
-  }
-  log(`Space-separated rows parsed: ${rows.length}`, rows.length > 10 ? 'ok' : 'warn');
-  if (rows.length > 0) {
-    const sorted = rows.sort((a,b)=>a.date.localeCompare(b.date));
-    log(`Date range: ${sorted[0].date} → ${sorted[sorted.length-1].date}`, 'ok');
-    log(`Last 5: ${sorted.slice(-5).map(r=>r.date+' TEC:'+r.TEC).join(', ')}`);
-  } else {
-    log('Space-separated parser failed — checking raw content', 'warn');
-    // Show chars around "2026-09"
-    const idx = html.indexOf('2026-09');
-    if (idx >= 0) logPre('Around 2026-09:', html.slice(Math.max(0,idx-20), idx+200));
-  }
+    // Test JSON parser
+    const rows = parseTradingLogic(html);
+    log(`✓ Parsed ${rows.length} rows`, rows.length > 50 ? 'ok' : 'warn');
+    if (rows.length > 0) {
+      const last5 = rows.slice(-5);
+      log(`Latest dates: ${last5.map(r=>r.Date).join(', ')}`, 'ok');
+      logPre('Last 5 rows:', last5.map(r=>`${r.Date} TEC:${r.TEC} BRD:${r.BRD}`).join('\n'));
+    } else {
+      log('✗ Parser returned 0 rows!', 'fail');
+      // Show raw breadthData context
+      const idx = html.indexOf('"breadthData"');
+      if (idx >= 0) logPre('breadthData context:', html.slice(idx, idx+500));
+      else log('✗ "breadthData" not found in response', 'fail');
+    }
+  } catch(e) { log('✗ '+e.message,'fail'); }
 }
 
 function clearCache() {
-  ['tl_breadth_v8','tl_breadth_v7','tl_breadth_v6','tl_breadth_v5'].forEach(k => localStorage.removeItem(k));
-  log('✓ All Trading Logic caches cleared — next click will re-fetch', 'ok');
+  ['v9','v8','v7','v6','v5'].forEach(v => localStorage.removeItem('tl_breadth_v'+v));
+  log('✓ All caches cleared — next Sector Trends click will fetch fresh data', 'ok');
 }
 </script>
 </body>
