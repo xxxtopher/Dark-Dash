@@ -2359,7 +2359,7 @@ const SENTIMENT_TICKERS = [
 ];
 
 // Sentiment cells that support 3-month chart (Gold, Silver, Oil, 10Y Yield)
-const SENT_CHART_IDS = new Set(['gold','silver','oil','tnx']);
+const SENT_CHART_IDS = new Set(['gold','silver','oil','tnx','btc','eth','dxy']);
 
 async function showSentimentHistory(tk) {
   const modal = document.getElementById('smOverlay');
@@ -2456,20 +2456,12 @@ function setupSentimentClicks() {
   document.getElementById('sentimentBar').addEventListener('click', e => {
     const cell = e.target.closest('.sent-cell');
     if (!cell) return;
-    // Find which ticker this cell belongs to
     const canvas = cell.querySelector('canvas');
     if (!canvas) return;
     const id = canvas.id.replace('sent-','').replace('-k','');
     if (!SENT_CHART_IDS.has(id)) return;
     const tk = SENTIMENT_TICKERS.find(t => t.id === id);
     if (tk) showSentimentHistory(tk);
-  });
-  // Add no-chart class to non-chartable cells
-  SENTIMENT_TICKERS.forEach(tk => {
-    if (!SENT_CHART_IDS.has(tk.id)) {
-      const canvas = document.getElementById('sent-'+tk.id+'-k');
-      if (canvas) canvas.closest('.sent-cell')?.classList.add('no-chart');
-    }
   });
 }
 
