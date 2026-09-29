@@ -1504,16 +1504,34 @@ async function saveBreadthToday() {
   if (!GH_OWNER || !GH_REPO) return;
   const { above20, above50, above200, up, down, highs, lows } = breadthState;
   if (above20 == null) return;
+
+  // Don't save on weekends (0=Sunday, 6=Saturday)
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  if (dayOfWeek === 0 || dayOfWeek === 6) {
+    const statusEl = document.getElementById('bhSaveStatus');
+    if (statusEl) statusEl.textContent = 'Weekend — not saving (markets closed)';
+    return;
+  }
+
   const tot = (up??0) + (down??0);
   const adv_pct = tot > 0 ? parseFloat((up/tot*100).toFixed(1)) : null;
-  const today = new Date().toISOString().slice(0,10);
+  const today = now.toISOString().slice(0,10);
   const statusEl = document.getElementById('bhSaveStatus');
   if (statusEl) statusEl.textContent = 'Saving to GitHub…';
 
   const existing = await ghReadFile(true);
   if (!existing) { if (statusEl) statusEl.textContent = 'GitHub not configured — set token first.'; return; }
 
-  const rows = existing.rows.filter(r => r.date !== today);
+  // Filter out: today's existing entry (we replace with latest) + any weekend dates
+  const rows = existing.rows.filter(r => {
+    if (r.date === today) return false; // replace with fresh reading
+    const d = new Date(r.date + 'T12:00:00Z'); // noon UTC to avoid timezone edge cases
+    const dow = d.getUTCDay();
+    if (dow === 0 || dow === 6) return false; // remove weekend entries
+    return true;
+  });
+
   rows.push({ date: today, ma20: above20, ma50: above50, ma200: above200,
     adv: up, dec: down, adv_pct, highs, lows });
   rows.sort((a,b) => a.date.localeCompare(b.date));
