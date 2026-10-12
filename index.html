@@ -260,7 +260,8 @@
   .watchlist-group-label::after { content:''; flex:1; height:1px; background:var(--border); }
   .watchlist-row { display:grid; grid-template-columns:48px 1fr 1fr 1fr; gap:2px; padding:4px 12px; border-bottom:1px solid rgba(255,255,255,0.03); cursor:pointer; transition:background 0.12s; align-items:center; }
   .watchlist-row:hover { background:var(--bg3); }
-  .w-ticker { font-size:12.5px; font-weight:600; color:var(--text); }
+  .w-ticker { font-size:12.5px; font-weight:600; color:var(--text); display:flex; align-items:center; gap:3px; }
+  .vol-spike { font-size:8px; color:#ff9800; background:rgba(255,152,0,0.15); border:1px solid rgba(255,152,0,0.4); border-radius:3px; padding:0 3px; line-height:14px; font-weight:700; flex-shrink:0; }
   .w-val { font-size:12px; font-weight:600; text-align:right; }
   .w-val.pos { color:var(--green); }
   .w-val.neg { color:var(--red); }
@@ -666,6 +667,21 @@ async function fetchQuoteHistory(sym, range) {
   const data = await fetchOne(`${YF_BASE}/v8/finance/chart/${sym}?range=${range}&interval=1d`);
   const closes = data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? [];
   return closes.filter(v => v != null);
+}
+
+async function fetchVolumeData(sym) {
+  // Fetch 3-month daily volume to compute 20-day avg
+  if (!WORKER_URL) await _delay(500);
+  const data = await fetchOne(`${YF_BASE}/v8/finance/chart/${sym}?range=3mo&interval=1d`);
+  const result = data?.chart?.result?.[0];
+  if (!result) return { todayVol: null, avgVol20: null, spikeRatio: null };
+  const volumes = (result.indicators?.quote?.[0]?.volume ?? []).filter(v => v != null && v > 0);
+  if (volumes.length < 2) return { todayVol: null, avgVol20: null, spikeRatio: null };
+  const todayVol = volumes[volumes.length - 1];
+  const prev20   = volumes.slice(-21, -1); // last 20 trading days excluding today
+  const avgVol20 = prev20.length ? prev20.reduce((a,b) => a+b, 0) / prev20.length : null;
+  const spikeRatio = (avgVol20 && avgVol20 > 0) ? todayVol / avgVol20 : null;
+  return { todayVol, avgVol20, spikeRatio };
 }
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
@@ -1676,8 +1692,11 @@ function renderWatchlist() {
     let html = '<div class="watchlist-group-label" style="color:' + grp.color + '">' + grp.group + '</div>';
     for (const sym of grp.tickers) {
       const d = wlData[sym] || {};
+      const spikeBadge = d.volSpike
+        ? '<span class="vol-spike" title="Volume spike: ' + (d.volSpikeRatio ? d.volSpikeRatio.toFixed(1)+'x avg' : '') + '">⚡' + (d.volSpikeRatio ? d.volSpikeRatio.toFixed(1)+'x' : '') + '</span>'
+        : '';
       html += '<div class="watchlist-row" onclick="window.open(\'' + tvUrl(sym) + '\',\'_blank\')">' +
-        '<div class="w-ticker">' + sym + '</div>' +
+        '<div class="w-ticker">' + sym + spikeBadge + '</div>' +
         '<div class="w-val ' + wlClass(d.d1) + '">' + wlFmt(d.d1) + '</div>' +
         '<div class="w-val ' + wlClass(d.d5) + '">' + wlFmt(d.d5) + '</div>' +
         '<div class="w-val ' + wlClass(d.w52 != null ? -d.w52 : null) + '">' + (d.w52!=null ? '-'+d.w52.toFixed(1)+'%' : '···') + '</div>' +
@@ -1700,24 +1719,26 @@ async function loadWatchlist() {
 
   const run = async (sym) => {
     try {
-      // Fetch 1D quote and 1Y history in parallel per symbol
-      const [q1d, hist1y, hist5d] = await Promise.all([
+      // Fetch 1D quote, 1Y history, 5D history, and volume data in parallel
+      const [q1d, hist1y, hist5d, vol] = await Promise.all([
         fetchQuote1D(sym),
         fetchQuoteHistory(sym, '1y'),
         fetchQuoteHistory(sym, '5d'),
+        fetchVolumeData(sym),
       ]);
       const d1 = q1d.changePercent ?? null;
-      // 5D%: (latest - 5d_ago) / 5d_ago
       const d5 = hist5d.length >= 2
         ? ((hist5d[hist5d.length-1] - hist5d[0]) / hist5d[0]) * 100
         : null;
-      // 52W↓: % below 52-week high
       const high52 = hist1y.length ? Math.max(...hist1y) : null;
       const last   = hist1y.length ? hist1y[hist1y.length-1] : null;
       const w52    = (high52 && last && high52 > 0)
         ? ((high52 - last) / high52) * 100
         : null;
-      wlData[sym] = { d1, d5, w52 };
+      // Volume spike: flag if today's volume > 2x 20-day average
+      const volSpike     = vol.spikeRatio != null && vol.spikeRatio >= 2;
+      const volSpikeRatio = vol.spikeRatio;
+      wlData[sym] = { d1, d5, w52, volSpike, volSpikeRatio };
     } catch(e) { console.warn('[wl]', sym, e.message); }
     renderWatchlist();
     renderWlTopPerformers();
