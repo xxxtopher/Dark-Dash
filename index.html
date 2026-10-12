@@ -212,6 +212,15 @@
   /* Breadth panel */
   .breadth-panel { background:var(--bg2); border-bottom:1px solid var(--border); padding:12px 28px; display:none; }
   .breadth-panel.visible { display:block; }
+  .div-alert { display:none; margin-bottom:10px; border-radius:5px; padding:8px 14px; border:1px solid; font-size:10.5px; line-height:1.5; }
+  .div-alert.visible { display:flex; align-items:flex-start; gap:10px; }
+  .div-alert.bearish { background:rgba(239,68,68,0.08); border-color:rgba(239,68,68,0.4); color:#fca5a5; }
+  .div-alert.bullish { background:rgba(0,230,118,0.06); border-color:rgba(0,230,118,0.3); color:#86efac; }
+  .div-alert.neutral { background:rgba(251,191,36,0.06); border-color:rgba(251,191,36,0.3); color:#fde68a; }
+  .div-alert-icon { font-size:16px; flex-shrink:0; line-height:1; }
+  .div-alert-body strong { display:block; font-size:9px; letter-spacing:1px; text-transform:uppercase; margin-bottom:3px; opacity:0.8; }
+  .div-details { display:flex; gap:16px; margin-top:6px; flex-wrap:wrap; }
+  .div-detail { font-size:9px; opacity:0.75; }
   .breadth-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
   .breadth-label { font-size:9px; color:var(--text3); letter-spacing:2px; text-transform:uppercase; }
   .breadth-ts { font-size:8px; color:var(--text3); }
@@ -471,6 +480,16 @@
       <span class="breadth-ts" id="breadthTimestamp"></span>
     </div>
   </div>
+  <!-- Breadth Divergence Alert -->
+  <div class="div-alert" id="divAlert">
+    <div class="div-alert-icon" id="divAlertIcon"></div>
+    <div class="div-alert-body">
+      <strong id="divAlertTitle"></strong>
+      <span id="divAlertMsg"></span>
+      <div class="div-details" id="divDetails"></div>
+    </div>
+  </div>
+
   <div class="breadth-grid" id="breadthGrid">
     <div class="breadth-card"><div class="breadth-card-title">Advance / Decline</div><div class="breadth-value loading">···</div></div>
     <div class="breadth-card"><div class="breadth-card-title">% Above 20-Day MA</div><div class="breadth-value loading">···</div></div>
@@ -1412,6 +1431,7 @@ async function loadBreadth(force=false) {
   // Save today's readings to GitHub and enable card click listeners
   addBreadthCardListeners();
   updateGhSetupStatus();
+  checkBreadthDivergence();
   saveBreadthToday();
 }
 
@@ -1637,6 +1657,98 @@ async function showBreadthHistory(metric, label, color) {
 }
 
 // Make breadth cards clickable
+// ─── BREADTH DIVERGENCE ALERT ─────────────────────────────────────────────────
+async function checkBreadthDivergence() {
+  const el     = document.getElementById('divAlert');
+  const icon   = document.getElementById('divAlertIcon');
+  const title  = document.getElementById('divAlertTitle');
+  const msg    = document.getElementById('divAlertMsg');
+  const detail = document.getElementById('divDetails');
+  if (!el) return;
+
+  // Need breadth history from GitHub and SPX price history
+  const [spxHist, breadthFile] = await Promise.all([
+    fetchQuoteHistory('%5EGSPC', '3mo'),   // SPX 3-month closes
+    ghReadFile(false),                      // breadth history JSON
+  ]);
+
+  const breadthRows = breadthFile?.rows ?? [];
+
+  // Need at least 10 days of breadth history and SPX data
+  if (spxHist.length < 10 || breadthRows.length < 5) {
+    el.classList.remove('visible');
+    return;
+  }
+
+  // SPX: compare latest vs 20 sessions ago
+  const spxNow  = spxHist[spxHist.length - 1];
+  const spxPrev = spxHist[Math.max(0, spxHist.length - 21)];
+  const spxChg  = ((spxNow - spxPrev) / spxPrev) * 100;
+  const spxNew52High = spxNow >= Math.max(...spxHist.slice(-252));
+
+  // Breadth: compare latest vs 20 sessions ago using saved history
+  const bNow  = breadthRows[breadthRows.length - 1];
+  const bPrev = breadthRows[Math.max(0, breadthRows.length - 21)];
+  const ma20Chg  = (bNow?.ma20  ?? 0) - (bPrev?.ma20  ?? 0);
+  const ma50Chg  = (bNow?.ma50  ?? 0) - (bPrev?.ma50  ?? 0);
+  const ma200Chg = (bNow?.ma200 ?? 0) - (bPrev?.ma200 ?? 0);
+  const advChg   = (bNow?.adv_pct ?? 0) - (bPrev?.adv_pct ?? 0);
+
+  // Average breadth momentum across all three MAs
+  const breadthMomentum = (ma20Chg + ma50Chg + ma200Chg) / 3;
+
+  // Current breadth values
+  const ma20Now = breadthState.above20 ?? bNow?.ma20;
+  const ma50Now = breadthState.above50 ?? bNow?.ma50;
+
+  // Divergence conditions
+  const bearishDiv = spxChg > 1 && breadthMomentum < -5;  // SPX up, breadth dropping
+  const extremeBearDiv = (spxNew52High || spxChg > 3) && breadthMomentum < -8;
+  const bullishDiv = spxChg < -1 && breadthMomentum > 5;  // SPX down, breadth improving
+  const healthyMkt = spxChg > 0 && breadthMomentum > 3;
+
+  el.classList.remove('bearish', 'bullish', 'neutral');
+  el.classList.add('visible');
+
+  const detailHtml = `
+    <span class="div-detail">SPX 20d: ${spxChg >= 0 ? '+' : ''}${spxChg.toFixed(1)}%</span>
+    <span class="div-detail">MA20 chg: ${ma20Chg >= 0 ? '+' : ''}${ma20Chg.toFixed(0)}pt</span>
+    <span class="div-detail">MA50 chg: ${ma50Chg >= 0 ? '+' : ''}${ma50Chg.toFixed(0)}pt</span>
+    <span class="div-detail">MA200 chg: ${ma200Chg >= 0 ? '+' : ''}${ma200Chg.toFixed(0)}pt</span>
+    <span class="div-detail">A/D chg: ${advChg >= 0 ? '+' : ''}${advChg.toFixed(1)}pt</span>
+    <span class="div-detail">MA20 now: ${ma20Now?.toFixed(0) ?? '—'}%</span>
+  `;
+
+  if (extremeBearDiv) {
+    el.classList.add('bearish');
+    icon.textContent = '🚨';
+    title.textContent = 'STRONG BEARISH DIVERGENCE';
+    msg.textContent = `SPX ${spxChg >= 0 ? 'at highs' : 'rising'} (+${spxChg.toFixed(1)}%) while breadth is deteriorating sharply (avg MA change: ${breadthMomentum.toFixed(1)}pt). This is a classic warning of a potential market top — price is being driven by a narrow group of stocks while the broader market weakens.`;
+  } else if (bearishDiv) {
+    el.classList.add('bearish');
+    icon.textContent = '⚠️';
+    title.textContent = 'BEARISH DIVERGENCE DETECTED';
+    msg.textContent = `SPX is up ${spxChg.toFixed(1)}% over the last 20 sessions but internal breadth is declining (avg MA change: ${breadthMomentum.toFixed(1)}pt). Market participation is narrowing — watch for a potential reversal.`;
+  } else if (bullishDiv) {
+    el.classList.add('bullish');
+    icon.textContent = '📈';
+    title.textContent = 'BULLISH DIVERGENCE DETECTED';
+    msg.textContent = `SPX has pulled back ${Math.abs(spxChg).toFixed(1)}% but breadth is improving (avg MA change: +${breadthMomentum.toFixed(1)}pt). Under-the-surface buying suggests the decline may be temporary.`;
+  } else if (healthyMkt) {
+    el.classList.add('bullish');
+    icon.textContent = '✅';
+    title.textContent = 'BREADTH CONFIRMING PRICE';
+    msg.textContent = `SPX gains are confirmed by broad participation — breadth improving alongside price. No divergence detected.`;
+  } else {
+    el.classList.add('neutral');
+    icon.textContent = '〰️';
+    title.textContent = 'NO SIGNIFICANT DIVERGENCE';
+    msg.textContent = `SPX ${spxChg >= 0 ? '+' : ''}${spxChg.toFixed(1)}% over 20 sessions with breadth momentum at ${breadthMomentum.toFixed(1)}pt. No actionable divergence signal at this time.`;
+  }
+
+  detail.innerHTML = detailHtml;
+}
+
 function addBreadthCardListeners() {
   // Called after renderBreadth() — delegate via grid
   const grid = document.getElementById('breadthGrid');
