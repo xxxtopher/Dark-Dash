@@ -116,6 +116,29 @@
   .btn-analysis.active { border-color:#34d399; color:#34d399; background:rgba(52,211,153,0.07); }
   .btn-analysis.computing { opacity:0.6; pointer-events:none; }
 
+  /* Options Flow Panel */
+  .options-panel { display:none; border-bottom:1px solid var(--border); background:var(--bg2); padding:12px 28px 16px; }
+  .options-panel.visible { display:block; }
+  .options-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .options-label { font-size:10px; color:#f472b6; letter-spacing:1.5px; text-transform:uppercase; font-weight:600; }
+  .options-ts { font-size:9px; color:var(--text3); }
+  .options-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(180px,1fr)); gap:8px; }
+  .options-card { background:var(--bg3); border:1px solid var(--border); border-radius:6px; padding:10px 12px; }
+  .options-card-sym { font-size:12px; font-weight:700; color:var(--text); margin-bottom:2px; }
+  .options-card-name { font-size:8.5px; color:var(--text3); letter-spacing:0.5px; text-transform:uppercase; margin-bottom:8px; }
+  .options-pc-bar-wrap { height:6px; background:var(--bg); border-radius:3px; overflow:hidden; margin-bottom:6px; position:relative; }
+  .options-pc-bar-put  { position:absolute; left:0; top:0; height:100%; background:#ef4444; border-radius:3px 0 0 3px; transition:width 0.4s; }
+  .options-pc-bar-call { position:absolute; right:0; top:0; height:100%; background:#00e676; border-radius:0 3px 3px 0; transition:width 0.4s; }
+  .options-pc-labels { display:flex; justify-content:space-between; font-size:9px; margin-bottom:4px; }
+  .options-pc-ratio { font-size:11px; font-weight:700; text-align:center; margin-top:4px; }
+  .options-pc-ratio.bearish { color:#ef4444; }
+  .options-pc-ratio.bullish { color:#00e676; }
+  .options-pc-ratio.neutral { color:var(--text2); }
+  .options-signal { font-size:8.5px; text-align:center; margin-top:3px; letter-spacing:0.5px; text-transform:uppercase; }
+  .options-oi { font-size:8px; color:var(--text3); text-align:center; margin-top:3px; }
+  .options-summary { margin-top:12px; padding:10px 14px; background:var(--bg3); border:1px solid var(--border); border-radius:6px; font-size:10.5px; color:var(--text2); line-height:1.6; }
+  .options-summary strong { color:#f472b6; }
+
   /* Market Analysis Panel */
   .analysis-panel { display:none; border-bottom:1px solid var(--border); background:var(--bg2); }
   .analysis-panel.visible { display:block; }
@@ -131,6 +154,9 @@
   .analysis-verdict { margin-top:10px; padding:8px 28px; background:var(--bg); border-top:1px solid var(--border); font-size:10.5px; color:var(--text2); line-height:1.6; }
   .analysis-verdict strong { color:var(--text); }
   .analysis-source { font-size:9px; color:var(--text3); padding:4px 28px 8px; }
+  .btn-options:hover { border-color:#f472b6; color:#f472b6; }
+  .btn-options.active { border-color:#f472b6; color:#f472b6; background:rgba(244,114,182,0.07); }
+  .btn-options.computing { opacity:0.6; pointer-events:none; }
   .btn-trends:hover { border-color:#818cf8; color:#818cf8; }
   .btn-trends.active { border-color:#818cf8; color:#818cf8; background:rgba(129,140,248,0.07); }
   .btn-trends.computing { opacity:0.6; pointer-events:none; }
@@ -357,6 +383,7 @@
     <button class="btn btn-movers" id="moversBtn"><span class="btn-icon">🔥</span> Theme Movers</button>
     <button class="btn btn-trump" id="trumpBtn"><span class="btn-icon">🇺🇸</span> Trump Daily</button>
     <button class="btn btn-news" id="newsBtn"><span class="btn-icon">📰</span> News & Filings</button>
+    <button class="btn btn-options" id="optionsBtn"><span class="btn-icon">🎯</span> Options Flow</button>
     <button class="btn btn-analysis" id="analysisBtn"><span class="btn-icon">🧠</span> Market Analysis</button>
     <button class="btn btn-trends" id="trendsBtn"><span class="btn-icon">📊</span> Sector Trends</button>
     <button class="btn btn-breadth" id="breadthBtn"><span class="btn-icon">⬡</span> Market Breadth</button>
@@ -425,6 +452,18 @@
     <div class="sm-canvas-wrap"><canvas id="smCanvas"></canvas></div>
     <div class="sm-meta"><span id="smMeta"></span><span id="smSource">Source: Yahoo Finance</span></div>
   </div>
+</div>
+
+<!-- Options Flow Panel (hidden by default) -->
+<div class="options-panel" id="optionsPanel">
+  <div class="options-header">
+    <span class="options-label">🎯 Options Flow · Put/Call Ratio by ETF</span>
+    <span class="options-ts" id="optionsTs"></span>
+  </div>
+  <div class="options-grid" id="optionsGrid">
+    <div style="font-size:11px;color:var(--text3);font-style:italic">Click "Options Flow" to load put/call ratios.</div>
+  </div>
+  <div class="options-summary" id="optionsSummary" style="display:none"></div>
 </div>
 
 <!-- Market Analysis Panel (hidden by default) -->
@@ -1862,6 +1901,151 @@ async function loadWatchlist() {
     for (const sym of syms) await run(sym);
   }
 }
+
+// ─── OPTIONS FLOW ─────────────────────────────────────────────────────────────
+const OPTIONS_TICKERS = [
+  { sym:'SPY',  name:'S&P 500 ETF' },
+  { sym:'QQQ',  name:'Nasdaq ETF' },
+  { sym:'IWM',  name:'Russell 2000' },
+  { sym:'GLD',  name:'Gold ETF' },
+  { sym:'TLT',  name:'20Y Treasury' },
+  { sym:'XLF',  name:'Financials' },
+  { sym:'XLE',  name:'Energy' },
+  { sym:'SMH',  name:'Semiconductors' },
+  { sym:'XBI',  name:'Biotech' },
+  { sym:'VIX',  name:'VIX' },
+  { sym:'NVDA', name:'Nvidia' },
+  { sym:'AAPL', name:'Apple' },
+];
+
+let optionsVisible = false;
+let optionsComputing = false;
+let optionsLastRun = null;
+const OPTIONS_CACHE_MS = 30 * 60 * 1000;
+
+async function fetchOptionsFlow(sym) {
+  try {
+    // Yahoo Finance options endpoint — returns nearest expiry chain
+    const data = await fetchOne(`${YF_BASE}/v7/finance/options/${sym}`);
+    const result = data?.optionChain?.result?.[0];
+    if (!result) return null;
+
+    const calls  = result.options?.[0]?.calls  ?? [];
+    const puts   = result.options?.[0]?.puts   ?? [];
+
+    // Sum open interest for puts and calls
+    const callOI = calls.reduce((s, c) => s + (c.openInterest ?? 0), 0);
+    const putOI  = puts.reduce((s,  p) => s + (p.openInterest  ?? 0), 0);
+
+    // Sum volume
+    const callVol = calls.reduce((s, c) => s + (c.volume ?? 0), 0);
+    const putVol  = puts.reduce((s,  p) => s + (p.volume  ?? 0), 0);
+
+    const pcRatioOI  = callOI  > 0 ? putOI  / callOI  : null;
+    const pcRatioVol = callVol > 0 ? putVol / callVol : null;
+
+    // Use volume P/C as primary (more timely), OI as secondary
+    const pcRatio = pcRatioVol ?? pcRatioOI;
+
+    return { sym, callOI, putOI, callVol, putVol, pcRatio, pcRatioVol, pcRatioOI };
+  } catch(e) {
+    console.warn('[options]', sym, e.message);
+    return null;
+  }
+}
+
+function pcSignal(ratio) {
+  if (ratio == null) return { label:'—', cls:'neutral' };
+  if (ratio > 1.5)  return { label:'VERY BEARISH', cls:'bearish' };
+  if (ratio > 1.1)  return { label:'BEARISH', cls:'bearish' };
+  if (ratio > 0.9)  return { label:'NEUTRAL', cls:'neutral' };
+  if (ratio > 0.7)  return { label:'BULLISH', cls:'bullish' };
+  return               { label:'VERY BULLISH', cls:'bullish' };
+}
+
+function renderOptionsCard(d) {
+  if (!d) return '';
+  const sig = pcSignal(d.pcRatio);
+  const ratio = d.pcRatio != null ? d.pcRatio.toFixed(2) : '—';
+  const totalOI = (d.callOI + d.putOI);
+  const callPct = totalOI > 0 ? (d.callOI / totalOI * 100).toFixed(0) : 50;
+  const putPct  = totalOI > 0 ? (d.putOI  / totalOI * 100).toFixed(0) : 50;
+  const fmtK = n => n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1e3 ? (n/1e3).toFixed(0)+'K' : n;
+
+  return `<div class="options-card">
+    <div class="options-card-sym">${d.sym}</div>
+    <div class="options-card-name">${OPTIONS_TICKERS.find(t=>t.sym===d.sym)?.name ?? ''}</div>
+    <div class="options-pc-labels">
+      <span style="color:#ef4444;font-size:9px">P ${fmtK(d.putVol)}</span>
+      <span style="color:#00e676;font-size:9px">C ${fmtK(d.callVol)}</span>
+    </div>
+    <div class="options-pc-bar-wrap">
+      <div class="options-pc-bar-put"  style="width:${putPct}%"></div>
+      <div class="options-pc-bar-call" style="width:${callPct}%"></div>
+    </div>
+    <div class="options-pc-ratio ${sig.cls}">P/C ${ratio}</div>
+    <div class="options-signal" style="color:${sig.cls==='bearish'?'#ef4444':sig.cls==='bullish'?'#00e676':'var(--text3)'}">${sig.label}</div>
+    <div class="options-oi">OI: P ${fmtK(d.putOI)} · C ${fmtK(d.callOI)}</div>
+  </div>`;
+}
+
+async function loadOptionsFlow() {
+  if (optionsComputing) return;
+  optionsComputing = true;
+  document.getElementById('optionsBtn').classList.add('computing');
+  document.getElementById('optionsGrid').innerHTML =
+    '<div style="font-size:11px;color:var(--text3);grid-column:1/-1">Loading options data…</div>';
+  document.getElementById('optionsSummary').style.display = 'none';
+
+  // Fetch all in parallel
+  const results = await Promise.all(OPTIONS_TICKERS.map(t => fetchOptionsFlow(t.sym)));
+  const valid = results.filter(Boolean);
+
+  if (!valid.length) {
+    document.getElementById('optionsGrid').innerHTML =
+      '<div style="font-size:11px;color:var(--red);grid-column:1/-1">Failed to load options data.</div>';
+    optionsComputing = false;
+    document.getElementById('optionsBtn').classList.remove('computing');
+    return;
+  }
+
+  // Render cards
+  document.getElementById('optionsGrid').innerHTML = valid.map(renderOptionsCard).join('');
+
+  // Overall market sentiment from SPY + QQQ P/C
+  const spyData = valid.find(d => d.sym === 'SPY');
+  const qqqData = valid.find(d => d.sym === 'QQQ');
+  const avgPC = [spyData, qqqData].filter(Boolean).reduce((s,d) => s + (d.pcRatio??0), 0) /
+                [spyData, qqqData].filter(Boolean).length;
+
+  const bearish = valid.filter(d => (d.pcRatio??0) > 1.1).map(d=>d.sym);
+  const bullish = valid.filter(d => (d.pcRatio??0) < 0.8).map(d=>d.sym);
+  const spySig  = pcSignal(spyData?.pcRatio);
+
+  const summaryEl = document.getElementById('optionsSummary');
+  summaryEl.style.display = 'block';
+  summaryEl.innerHTML = `<strong>Overall Sentiment:</strong> SPY P/C ${spyData?.pcRatio?.toFixed(2) ?? '—'} · QQQ P/C ${qqqData?.pcRatio?.toFixed(2) ?? '—'} · Market tone: <span style="color:${spySig.cls==='bearish'?'#ef4444':spySig.cls==='bullish'?'#00e676':'var(--text2)'}">${spySig.label}</span>
+    ${bearish.length ? '<br>🐻 Most hedged (high P/C): ' + bearish.join(', ') : ''}
+    ${bullish.length ? '<br>🐂 Most bullish (low P/C): ' + bullish.join(', ') : ''}
+    <br><span style="font-size:9px;color:var(--text3)">P/C > 1.1 = bearish · P/C < 0.8 = bullish · near 1.0 = neutral · Based on nearest expiry options chain volume</span>`;
+
+  optionsLastRun = Date.now();
+  document.getElementById('optionsTs').textContent =
+    valid.length + ' tickers · ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  optionsComputing = false;
+  document.getElementById('optionsBtn').classList.remove('computing');
+}
+
+document.getElementById('optionsBtn').addEventListener('click', () => {
+  if (!optionsVisible) {
+    optionsVisible = true;
+    document.getElementById('optionsPanel').classList.add('visible');
+    document.getElementById('optionsBtn').classList.add('active');
+  }
+  if (!optionsLastRun || Date.now() - optionsLastRun > OPTIONS_CACHE_MS) {
+    loadOptionsFlow();
+  }
+});
 
 // ─── MARKET ANALYSIS ──────────────────────────────────────────────────────────
 let analysisVisible = false;
