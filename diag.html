@@ -1,69 +1,69 @@
 <!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><title>Trading Logic Diagnostic v2</title>
+<head><meta charset="UTF-8"><title>Options Flow Diagnostic</title>
 <style>body{background:#0d1117;color:#c8d8e8;font-family:monospace;padding:20px;font-size:12px}
 .ok{color:#00e676}.fail{color:#ff4444}.warn{color:#ffd700}
 button{background:#1e2a38;color:#c8d8e8;border:1px solid #253040;padding:8px 16px;cursor:pointer;font-family:monospace;margin:4px;font-size:12px}
 pre{background:#131920;padding:8px;border-radius:4px;white-space:pre-wrap;word-break:break-all;font-size:10px;max-height:300px;overflow-y:auto}
 </style></head>
 <body>
-<h2 style="color:#818cf8">Trading Logic Diagnostic v2 — JSON parser</h2>
-<button onclick="testAll()">Run all tests</button>
-<button onclick="clearCache()">Clear cache</button>
+<h2 style="color:#f472b6">Options Flow Diagnostic</h2>
+<button onclick="test('SPY')">Test SPY options</button>
+<button onclick="test2('SPY')">Test v8 endpoint</button>
+<button onclick="test3('SPY')">Test quote endpoint</button>
 <div id="out"></div>
 <script>
 const WORKER = 'https://yahoo-proxy.topherho.workers.dev';
+const YF1 = 'https://query1.finance.yahoo.com';
+const YF2 = 'https://query2.finance.yahoo.com';
 const log = (msg, cls='') => { document.getElementById('out').innerHTML += '<div class="'+cls+'">'+msg+'</div>'; };
 const logPre = (label, txt) => { document.getElementById('out').innerHTML += '<div style="color:#6a8aa0;margin-top:4px">'+label+'</div><pre>'+String(txt).replace(/</g,'&lt;').slice(0,2000)+'</pre>'; };
 
-function parseTradingLogic(html) {
-  const rows = [], seen = new Set();
-  try {
-    const m = html.match(/"breadthData":\s*(\[\{[\s\S]*?\}\])/);
-    if (m) {
-      const arr = JSON.parse(m[1]);
-      for (const r of arr) {
-        if (!r.Date || seen.has(r.Date)) continue;
-        const sectors = [r.COM,r.CND,r.CNS,r.ENE,r.FIN,r.HLT,r.IND,r.MAT,r.REI,r.TEC,r.UTL];
-        if (sectors.every(v => v == null || v === 0)) continue;
-        seen.add(r.Date);
-        rows.push({ Date:r.Date, TEC:r.TEC??0, BRD:Math.round((r.Breadth??0)/11) });
-      }
-    }
-  } catch(e) { log('JSON parse error: '+e.message,'fail'); }
-  return rows.sort((a,b)=>a.Date.localeCompare(b.Date));
+async function fetchUrl(url) {
+  const res = await fetch(`${WORKER}?url=${encodeURIComponent(url)}`, {signal: AbortSignal.timeout(10000)});
+  return { status: res.status, text: await res.text() };
 }
 
-async function testAll() {
-  document.getElementById('out').innerHTML = '';
-  log('Fetching Trading Logic...');
+async function test(sym) {
+  log('<br>--- v7 options endpoint ---');
+  const { status, text } = await fetchUrl(`${YF2}/v7/finance/options/${sym}`);
+  log(`Status: ${status}, Size: ${text.length}`, status===200?'ok':'fail');
   try {
-    const t0 = Date.now();
-    const res = await fetch(`${WORKER}?url=${encodeURIComponent('https://www.trading-logic.com/en')}`,
-      {signal: AbortSignal.timeout(15000)});
-    const html = await res.text();
-    log(`✓ Got ${html.length} bytes in ${Date.now()-t0}ms`, 'ok');
-
-    // Test JSON parser
-    const rows = parseTradingLogic(html);
-    log(`✓ Parsed ${rows.length} rows`, rows.length > 50 ? 'ok' : 'warn');
-    if (rows.length > 0) {
-      const last5 = rows.slice(-5);
-      log(`Latest dates: ${last5.map(r=>r.Date).join(', ')}`, 'ok');
-      logPre('Last 5 rows:', last5.map(r=>`${r.Date} TEC:${r.TEC} BRD:${r.BRD}`).join('\n'));
+    const d = JSON.parse(text);
+    const result = d?.optionChain?.result?.[0];
+    log('optionChain.result: ' + (result ? 'found' : 'missing'), result?'ok':'fail');
+    if (result) {
+      const calls = result.options?.[0]?.calls ?? [];
+      const puts  = result.options?.[0]?.puts  ?? [];
+      log(`Calls: ${calls.length}, Puts: ${puts.length}`, 'ok');
+      log(`Expiry dates: ${result.expirationDates?.slice(0,3).map(t=>new Date(t*1000).toLocaleDateString()).join(', ')}`);
+      const callVol = calls.reduce((s,c)=>s+(c.volume??0),0);
+      const putVol  = puts.reduce((s,p)=>s+(p.volume??0),0);
+      log(`Call vol: ${callVol}, Put vol: ${putVol}, P/C: ${(putVol/callVol).toFixed(2)}`, 'ok');
     } else {
-      log('✗ Parser returned 0 rows!', 'fail');
-      // Show raw breadthData context
-      const idx = html.indexOf('"breadthData"');
-      if (idx >= 0) logPre('breadthData context:', html.slice(idx, idx+500));
-      else log('✗ "breadthData" not found in response', 'fail');
+      logPre('Raw response:', text);
     }
-  } catch(e) { log('✗ '+e.message,'fail'); }
+  } catch(e) { log('Parse error: '+e.message,'fail'); logPre('Raw:',text); }
 }
 
-function clearCache() {
-  ['v9','v8','v7','v6','v5'].forEach(v => localStorage.removeItem('tl_breadth_v'+v));
-  log('✓ All caches cleared — next Sector Trends click will fetch fresh data', 'ok');
+async function test2(sym) {
+  log('<br>--- v8 chart options ---');
+  const urls = [
+    `${YF2}/v8/finance/options/${sym}`,
+    `${YF1}/v7/finance/options/${sym}`,
+    `${YF2}/v7/finance/options/${sym}?date=`,
+  ];
+  for (const url of urls) {
+    const { status, text } = await fetchUrl(url);
+    log(`[${status}] ${url.replace('https://query2.finance.yahoo.com','YF2').replace('https://query1.finance.yahoo.com','YF1')} — ${text.length}b`, status===200?'ok':'fail');
+    if (status===200 && text.includes('calls')) { log('  ✓ Has calls data','ok'); break; }
+  }
+}
+
+async function test3(sym) {
+  log('<br>--- Quote endpoint for reference ---');
+  const { status, text } = await fetchUrl(`${YF2}/v8/finance/chart/${sym}?range=1d&interval=1d`);
+  log(`Chart endpoint: ${status}, ${text.length}b`, status===200?'ok':'fail');
 }
 </script>
 </body>
