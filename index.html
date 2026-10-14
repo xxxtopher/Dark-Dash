@@ -1913,7 +1913,6 @@ const OPTIONS_TICKERS = [
   { sym:'XLE',  name:'Energy' },
   { sym:'SMH',  name:'Semiconductors' },
   { sym:'XBI',  name:'Biotech' },
-  { sym:'VIX',  name:'VIX' },
   { sym:'NVDA', name:'Nvidia' },
   { sym:'AAPL', name:'Apple' },
 ];
@@ -1923,101 +1922,95 @@ let optionsComputing = false;
 let optionsLastRun = null;
 const OPTIONS_CACHE_MS = 30 * 60 * 1000;
 
-// Yahoo Finance options endpoint requires auth (crumb) — not accessible directly.
-// Instead we compute a multi-factor sentiment score from freely available data:
-//   1. VIX level & trend (fear gauge)
-//   2. VIX/VIX3M ratio (term structure — contango=calm, backwardation=fearful)
-//   3. Put-proxy: GLD vs SPY ratio (flight to safety)
-//   4. Each ETF's 5D vs 20D momentum (price trend)
-//   5. Each ETF's 52W position (how extended)
+// Fetch real CBOE daily P/C ratios from public page
+async function fetchCboePCRatios() {
+  const url = 'https://www.cboe.com/us/options/market_statistics/daily/';
+  const res = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(12000) });
+  if (!res.ok) throw new Error('CBOE fetch HTTP ' + res.status);
+  const html = await res.text();
 
-async function fetchSentimentData(sym) {
-  try {
-    const [chart1d, chart3mo] = await Promise.all([
-      fetchOne(`${YF_BASE}/v8/finance/chart/${sym}?range=1d&interval=5m`),
-      fetchOne(`${YF_BASE}/v8/finance/chart/${sym}?range=3mo&interval=1d`),
-    ]);
-    const quote  = chart1d?.chart?.result?.[0]?.meta ?? {};
-    const closes = (chart3mo?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? []).filter(v => v != null);
-    if (!closes.length) return null;
+  // Parse key ratios from the HTML table
+  const extract = (label) => {
+    const re = new RegExp(label.replace(/[+()]/g,'\\$&') + '[^<]*</(?:td|th)>[^<]*<(?:td|th)[^>]*>\\s*([\\d.]+)', 'i');
+    const m = html.match(re);
+    return m ? parseFloat(m[1]) : null;
+  };
 
-    const price   = quote.regularMarketPrice ?? closes[closes.length-1];
-    const chg1d   = quote.regularMarketChangePercent ?? 0;
-    const chg5d   = closes.length >= 5  ? ((closes[closes.length-1] - closes[closes.length-6])  / closes[closes.length-6])  * 100 : 0;
-    const chg20d  = closes.length >= 20 ? ((closes[closes.length-1] - closes[closes.length-21]) / closes[closes.length-21]) * 100 : 0;
-    const hi52    = Math.max(...closes);
-    const lo52    = Math.min(...closes);
-    const pos52   = hi52 > lo52 ? ((price - lo52) / (hi52 - lo52)) * 100 : 50; // 0=52w low, 100=52w high
-    const vol1d   = chart1d?.chart?.result?.[0]?.indicators?.quote?.[0]?.volume ?? [];
-    const todayVol = vol1d.filter(v=>v!=null).reduce((a,b)=>a+b,0);
+  // Also try extracting from text patterns like "TOTAL PUT/CALL RATIO | 0.83"
+  const extractAlt = (label) => {
+    const re = new RegExp(label + '[^\\d]*([\\d]+\\.[\\d]+)', 'i');
+    const m = html.match(re);
+    return m ? parseFloat(m[1]) : null;
+  };
 
-    return { sym, price, chg1d, chg5d, chg20d, pos52, todayVol };
-  } catch(e) { console.warn('[sentiment]', sym, e.message); return null; }
+  const ratios = {
+    total:    extract('TOTAL PUT/CALL RATIO')    ?? extractAlt('TOTAL PUT.CALL RATIO'),
+    equity:   extract('EQUITY PUT/CALL RATIO')   ?? extractAlt('EQUITY PUT.CALL RATIO'),
+    index:    extract('INDEX PUT/CALL RATIO')     ?? extractAlt('INDEX PUT.CALL RATIO'),
+    spx:      extract('SPX.*PUT/CALL RATIO')      ?? extractAlt('SPX.*PUT.CALL RATIO'),
+    etps:     extract('EXCHANGE TRADED PRODUCTS PUT/CALL RATIO') ?? extractAlt('EXCHANGE TRADED PRODUCTS PUT.CALL RATIO'),
+    vixRatio: extract('CBOE VOLATILITY INDEX.*PUT/CALL RATIO')   ?? extractAlt('VIX.*PUT.CALL RATIO'),
+  };
+
+  // Parse volume tables
+  const callVol = html.match(/SUM OF ALL.*?VOLUME.*?([\d,]+).*?([\d,]+)/s);
+  const totalCallVol = callVol ? parseInt(callVol[1].replace(/,/g,'')) : null;
+  const totalPutVol  = callVol ? parseInt(callVol[2].replace(/,/g,'')) : null;
+
+  return { ratios, totalCallVol, totalPutVol };
 }
 
-// Score each ETF -100 (very bearish) to +100 (very bullish) from price momentum
-function sentimentScore(d) {
-  if (!d) return null;
-  let score = 0;
-  // 20-day momentum (weight 40%)
-  if      (d.chg20d >  10) score += 40;
-  else if (d.chg20d >   5) score += 25;
-  else if (d.chg20d >   2) score += 15;
-  else if (d.chg20d >   0) score += 5;
-  else if (d.chg20d >  -2) score -= 5;
-  else if (d.chg20d >  -5) score -= 15;
-  else if (d.chg20d > -10) score -= 25;
-  else                     score -= 40;
-  // 5-day momentum (weight 35%)
-  if      (d.chg5d >  5)  score += 35;
-  else if (d.chg5d >  2)  score += 20;
-  else if (d.chg5d >  0)  score += 8;
-  else if (d.chg5d > -2)  score -= 8;
-  else if (d.chg5d > -5)  score -= 20;
-  else                     score -= 35;
-  // 52W position (weight 25%)
-  if      (d.pos52 > 90)  score += 25;
-  else if (d.pos52 > 70)  score += 15;
-  else if (d.pos52 > 50)  score += 5;
-  else if (d.pos52 > 30)  score -= 5;
-  else if (d.pos52 > 10)  score -= 15;
-  else                     score -= 25;
-  return Math.max(-100, Math.min(100, score));
+// Also fetch VIX and SPY price for context
+async function fetchVixAndSpy() {
+  const [vix, spy] = await Promise.all([
+    fetchOne(`${YF_BASE}/v8/finance/chart/%5EVIX?range=5d&interval=1d`),
+    fetchOne(`${YF_BASE}/v8/finance/chart/SPY?range=5d&interval=1d`),
+  ]);
+  const vixMeta = vix?.chart?.result?.[0]?.meta ?? {};
+  const spyMeta = spy?.chart?.result?.[0]?.meta ?? {};
+  return {
+    vix:    vixMeta.regularMarketPrice ?? null,
+    vixChg: vixMeta.regularMarketChangePercent ?? null,
+    spy:    spyMeta.regularMarketPrice ?? null,
+    spyChg: spyMeta.regularMarketChangePercent ?? null,
+  };
 }
 
-function scoreSignal(score) {
-  if (score == null) return { label:'—', cls:'neutral', color:'var(--text3)' };
-  if (score >=  60)  return { label:'VERY BULLISH', cls:'bullish', color:'#00e676' };
-  if (score >=  25)  return { label:'BULLISH',      cls:'bullish', color:'#4ade80' };
-  if (score >=  -25) return { label:'NEUTRAL',      cls:'neutral', color:'var(--text2)' };
-  if (score >=  -60) return { label:'BEARISH',      cls:'bearish', color:'#f87171' };
-  return               { label:'VERY BEARISH', cls:'bearish', color:'#ef4444' };
+function pcSignal(ratio, isEquity=false) {
+  // Equity P/C averages ~0.55-0.65 (lower than total because retail buys calls)
+  // Total/Index P/C averages ~0.9-1.1
+  const thresholds = isEquity
+    ? { vBull:0.45, bull:0.55, bear:0.75, vBear:0.90 }
+    : { vBull:0.70, bull:0.85, bear:1.10, vBear:1.30 };
+  if (ratio == null) return { label:'—', cls:'neutral', color:'var(--text3)' };
+  if (ratio <= thresholds.vBull) return { label:'VERY BULLISH', cls:'bullish', color:'#00e676' };
+  if (ratio <= thresholds.bull)  return { label:'BULLISH',      cls:'bullish', color:'#4ade80' };
+  if (ratio <= thresholds.bear)  return { label:'NEUTRAL',      cls:'neutral', color:'var(--text2)' };
+  if (ratio <= thresholds.vBear) return { label:'BEARISH',      cls:'bearish', color:'#f87171' };
+  return                          { label:'VERY BEARISH', cls:'bearish', color:'#ef4444' };
 }
 
-function renderSentimentCard(d) {
-  if (!d) return '';
-  const score = sentimentScore(d);
-  const sig   = scoreSignal(score);
-  const barW  = Math.abs(score);
-  const barColor = score >= 0 ? '#00e676' : '#ef4444';
-  const name  = OPTIONS_TICKERS.find(t => t.sym === d.sym)?.name ?? '';
-  const fmt   = v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
+function renderPCCard(label, ratio, isEquity, description, callVol, putVol) {
+  if (ratio == null) return '';
+  const sig = pcSignal(ratio, isEquity);
+  const total = (callVol ?? 0) + (putVol ?? 0);
+  const putPct  = total > 0 ? (putVol  / total * 100) : 50;
+  const callPct = total > 0 ? (callVol / total * 100) : 50;
+  const fmtM = n => n == null ? '—' : n >= 1e6 ? (n/1e6).toFixed(2)+'M' : n >= 1e3 ? (n/1e3).toFixed(0)+'K' : String(n);
 
   return `<div class="options-card">
-    <div class="options-card-sym">${d.sym}</div>
-    <div class="options-card-name">${name}</div>
-    <div class="options-pc-labels">
-      <span style="color:var(--text3);font-size:8.5px">1D ${fmt(d.chg1d)}</span>
-      <span style="color:var(--text3);font-size:8.5px">5D ${fmt(d.chg5d)}</span>
-      <span style="color:var(--text3);font-size:8.5px">20D ${fmt(d.chg20d)}</span>
+    <div class="options-card-sym" style="font-size:11px">${label}</div>
+    <div class="options-card-name">${description}</div>
+    ${callVol != null ? `<div class="options-pc-labels">
+      <span style="color:#ef4444;font-size:8.5px">PUT ${fmtM(putVol)}</span>
+      <span style="color:#00e676;font-size:8.5px">CALL ${fmtM(callVol)}</span>
     </div>
-    <div class="options-pc-bar-wrap" style="margin:5px 0">
-      <div style="position:absolute;left:50%;top:0;width:1px;height:100%;background:var(--border)"></div>
-      <div style="position:absolute;${score>=0?'left:50%':'right:50%'};top:0;width:${barW/2}%;height:100%;background:${barColor};border-radius:3px"></div>
-    </div>
-    <div class="options-pc-ratio ${sig.cls}" style="color:${sig.color}">${score > 0 ? '+' : ''}${score}</div>
+    <div class="options-pc-bar-wrap">
+      <div class="options-pc-bar-put"  style="width:${putPct.toFixed(0)}%"></div>
+      <div class="options-pc-bar-call" style="width:${callPct.toFixed(0)}%"></div>
+    </div>` : ''}
+    <div class="options-pc-ratio ${sig.cls}" style="color:${sig.color};font-size:20px;margin:8px 0 2px">P/C ${ratio.toFixed(2)}</div>
     <div class="options-signal" style="color:${sig.color}">${sig.label}</div>
-    <div class="options-oi">52W pos: ${d.pos52.toFixed(0)}%</div>
   </div>`;
 }
 
@@ -2026,50 +2019,66 @@ async function loadOptionsFlow() {
   optionsComputing = true;
   document.getElementById('optionsBtn').classList.add('computing');
   document.getElementById('optionsGrid').innerHTML =
-    '<div style="font-size:11px;color:var(--text3);grid-column:1/-1">Loading market sentiment data…</div>';
+    '<div style="font-size:11px;color:var(--text3);grid-column:1/-1">Fetching CBOE daily put/call ratios…</div>';
   document.getElementById('optionsSummary').style.display = 'none';
 
-  // Add VIX to tickers for fear gauge
-  const allTickers = [...OPTIONS_TICKERS, { sym:'%5EVIX', name:'VIX Fear Index' }];
-  const results = await Promise.all(allTickers.map(t => fetchSentimentData(t.sym)));
-  const valid = results.filter(Boolean);
+  try {
+    const [cboe, mkt] = await Promise.all([
+      fetchCboePCRatios(),
+      fetchVixAndSpy(),
+    ]);
 
-  if (!valid.length) {
-    document.getElementById('optionsGrid').innerHTML =
-      '<div style="font-size:11px;color:var(--red);grid-column:1/-1">Failed to load sentiment data.</div>';
+    const { ratios, totalCallVol, totalPutVol } = cboe;
+
+    if (!ratios.total && !ratios.equity) throw new Error('No P/C data found in CBOE page');
+
+    const cards = [
+      renderPCCard('EQUITY P/C', ratios.equity, true,  'Equity options — retail sentiment',  null, null),
+      renderPCCard('TOTAL P/C',  ratios.total,  false, 'All CBOE options combined',          totalCallVol, totalPutVol),
+      renderPCCard('INDEX P/C',  ratios.index,  false, 'Index options — institutional hedge', null, null),
+      renderPCCard('SPX P/C',    ratios.spx,    false, 'S&P 500 SPX + SPXW options',          null, null),
+      renderPCCard('ETP P/C',    ratios.etps,   false, 'ETF options (SPY, QQQ, etc.)',         null, null),
+      renderPCCard('VIX P/C',    ratios.vixRatio, false, 'VIX options — hedging demand',       null, null),
+    ].filter(Boolean);
+
+    document.getElementById('optionsGrid').innerHTML = cards.join('') ||
+      '<div style="font-size:11px;color:var(--red);grid-column:1/-1">Could not parse CBOE ratios.</div>';
+
+    // Overall signal — equity P/C is the purest retail sentiment gauge
+    const primarySig = pcSignal(ratios.equity, true);
+    const equityInterp = ratios.equity != null
+      ? (ratios.equity < 0.5 ? 'Extreme call buying — crowd is very bullish (contrarian caution)'
+       : ratios.equity < 0.6 ? 'Moderate call bias — bullish sentiment'
+       : ratios.equity < 0.75 ? 'Balanced — neutral sentiment'
+       : ratios.equity < 0.9 ? 'Put buying elevated — defensive positioning'
+       : 'Heavy put buying — fear/hedging dominant (contrarian bullish signal)') : '';
+
+    const vixStr = mkt.vix != null
+      ? `VIX: ${mkt.vix.toFixed(1)} (${mkt.vixChg >= 0 ? '+' : ''}${mkt.vixChg?.toFixed(1)}% today)` : '';
+    const spyStr = mkt.spy != null
+      ? `SPY: $${mkt.spy.toFixed(2)} (${mkt.spyChg >= 0 ? '+' : ''}${mkt.spyChg?.toFixed(1)}%)` : '';
+
+    const summaryEl = document.getElementById('optionsSummary');
+    summaryEl.style.display = 'block';
+    summaryEl.innerHTML =
+      `<strong>CBOE Daily Put/Call — <span style="color:${primarySig.color}">${primarySig.label}</span></strong>
+      ${vixStr ? ' · ' + vixStr : ''} ${spyStr ? ' · ' + spyStr : ''}
+      <br>${equityInterp}
+      <br><span style="font-size:9px;color:var(--text3)">Source: CBOE Daily Market Statistics (cboe.com) · Updated each trading day after close · Equity P/C is the purest retail sentiment gauge · Index P/C runs higher due to institutional hedging</span>`;
+
+    optionsLastRun = Date.now();
+    document.getElementById('optionsTs').textContent =
+      'CBOE · ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
     optionsComputing = false;
     document.getElementById('optionsBtn').classList.remove('computing');
-    return;
+
+  } catch(e) {
+    console.warn('[options]', e.message);
+    document.getElementById('optionsGrid').innerHTML =
+      `<div style="font-size:11px;color:var(--red);grid-column:1/-1">✗ Failed: ${e.message}<br><span style="color:var(--text3);font-size:9px">Make sure cboe.com is in your Cloudflare Worker allowlist</span></div>`;
+    optionsComputing = false;
+    document.getElementById('optionsBtn').classList.remove('computing');
   }
-
-  document.getElementById('optionsGrid').innerHTML = valid.map(renderSentimentCard).join('');
-
-  // Overall score from SPY + QQQ
-  const spyD = valid.find(d => d.sym === 'SPY');
-  const qqqD = valid.find(d => d.sym === 'QQQ');
-  const vixD = valid.find(d => d.sym === '%5EVIX');
-  const scores = valid.map(d => sentimentScore(d)).filter(s => s != null);
-  const avgScore = scores.reduce((a,b)=>a+b,0) / scores.length;
-  const overallSig = scoreSignal(avgScore);
-
-  const bullishList = valid.filter(d => (sentimentScore(d)??0) >= 25).map(d=>d.sym).slice(0,5);
-  const bearishList = valid.filter(d => (sentimentScore(d)??0) <= -25).map(d=>d.sym).slice(0,5);
-  const vixLevel = vixD ? `VIX: ${vixD.price?.toFixed(1) ?? '—'} (${vixD.chg1d >= 0 ? '+' : ''}${vixD.chg1d?.toFixed(1)}% today)` : '';
-
-  const summaryEl = document.getElementById('optionsSummary');
-  summaryEl.style.display = 'block';
-  summaryEl.innerHTML =
-    `<strong>Overall Sentiment Score: <span style="color:${overallSig.color}">${avgScore.toFixed(0)} — ${overallSig.label}</span></strong>
-    ${vixLevel ? ' · ' + vixLevel : ''}
-    ${bullishList.length ? '<br>🐂 Bullish momentum: ' + bullishList.join(', ') : ''}
-    ${bearishList.length ? '<br>🐻 Bearish momentum: ' + bearishList.join(', ') : ''}
-    <br><span style="font-size:9px;color:var(--text3)">Score based on 20D/5D price momentum + 52-week position · Range: -100 (extreme fear) to +100 (extreme greed) · Note: Yahoo Finance options P/C data requires authentication and is unavailable without a paid API</span>`;
-
-  optionsLastRun = Date.now();
-  document.getElementById('optionsTs').textContent =
-    valid.length + ' tickers · ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-  optionsComputing = false;
-  document.getElementById('optionsBtn').classList.remove('computing');
 }
 
 document.getElementById('optionsBtn').addEventListener('click', () => {
