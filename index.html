@@ -116,30 +116,44 @@
   .btn-analysis.active { border-color:#34d399; color:#34d399; background:rgba(52,211,153,0.07); }
   .btn-analysis.computing { opacity:0.6; pointer-events:none; }
 
-  /* Correlation Heatmap Panel */
-  .corr-panel { display:none; border-bottom:1px solid var(--border); background:var(--bg2); padding:12px 28px 16px; }
-  .corr-panel.visible { display:block; }
-  .corr-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
-  .corr-label { font-size:10px; color:#67e8f9; letter-spacing:1.5px; text-transform:uppercase; font-weight:600; }
-  .corr-ts { font-size:9px; color:var(--text3); }
-  .corr-periods { display:flex; gap:4px; }
-  .corr-period-btn { background:var(--bg3); border:1px solid var(--border); color:var(--text3); font-family:inherit; font-size:9px; padding:2px 9px; border-radius:3px; cursor:pointer; letter-spacing:0.5px; }
-  .corr-period-btn:hover { color:var(--text); }
-  .corr-period-btn.active { border-color:#67e8f9; color:#67e8f9; }
-  .corr-layout { display:grid; grid-template-columns:1fr 250px; gap:14px; align-items:start; }
-  .corr-canvas-wrap { position:relative; width:100%; overflow-x:auto; }
-  .corr-tip { position:absolute; background:rgba(13,17,23,0.96); border:1px solid var(--border); border-radius:4px; padding:5px 9px; font-size:9.5px; color:var(--text); pointer-events:none; display:none; white-space:nowrap; z-index:10; line-height:1.5; }
-  .corr-insights { font-size:10px; color:var(--text2); }
-  .corr-ins-title { font-size:8.5px; letter-spacing:1px; text-transform:uppercase; margin:10px 0 4px; padding-bottom:3px; border-bottom:1px solid var(--border); font-weight:600; }
-  .corr-ins-title:first-child { margin-top:0; }
-  .corr-ins-row { display:flex; justify-content:space-between; padding:2px 3px; border-radius:3px; }
-  .corr-ins-row:hover { background:rgba(255,255,255,0.04); }
-  .corr-ins-pair { color:var(--text); font-size:10px; }
-  .corr-ins-val { font-weight:600; font-size:10px; }
-  .corr-note { margin-top:8px; font-size:9.5px; line-height:1.55; color:var(--text2); background:var(--bg3); border:1px solid var(--border); border-radius:5px; padding:7px 9px; }
-  .corr-legend { height:7px; border-radius:3px; background:linear-gradient(90deg,#3b82f6,#1a222c,#f97316); margin-top:3px; }
-  .corr-legend-labels { display:flex; justify-content:space-between; font-size:8px; color:var(--text3); margin-top:2px; }
-  @media (max-width:900px) { .corr-layout { grid-template-columns:1fr; } }
+  /* Earnings Calendar */
+  .btn-earn:hover { border-color:#fbbf24; color:#fbbf24; }
+  .btn-earn.active { border-color:#fbbf24; color:#fbbf24; background:rgba(251,191,36,0.07); }
+  .earn-panel { display:none; border-bottom:1px solid var(--border); background:var(--bg2); padding:12px 28px 16px; }
+  .earn-panel.visible { display:block; }
+  .earn-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; flex-wrap:wrap; gap:8px; }
+  .earn-label { font-size:10px; color:#fbbf24; letter-spacing:1.5px; text-transform:uppercase; font-weight:600; }
+  .earn-ts { font-size:9px; color:var(--text3); }
+  .earn-toggle { display:flex; gap:4px; }
+  .earn-toggle button, .earn-refresh { background:var(--bg3); border:1px solid var(--border); color:var(--text3); font-family:inherit; font-size:9px; padding:2px 9px; border-radius:3px; cursor:pointer; letter-spacing:0.5px; }
+  .earn-toggle button:hover, .earn-refresh:hover { color:var(--text); }
+  .earn-toggle button.active { border-color:#fbbf24; color:#fbbf24; }
+  .earn-summary { font-size:10.5px; color:var(--text2); line-height:1.7; margin-bottom:10px; padding:7px 12px; background:var(--bg3); border:1px solid var(--border); border-radius:5px; }
+  .earn-summary b { color:var(--text); }
+  .earn-legend { font-size:9px; color:var(--text3); margin-top:2px; }
+  .earn-body { display:grid; grid-template-columns:repeat(auto-fill,minmax(310px,1fr)); gap:10px; align-items:start; max-height:560px; overflow-y:auto; }
+  .earn-day { background:var(--bg3); border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+  .earn-day.today { border-color:rgba(251,191,36,0.55); }
+  .earn-day-head { display:flex; justify-content:space-between; align-items:center; padding:5px 10px; font-size:10px; font-weight:600; color:var(--text); background:rgba(255,255,255,0.03); border-bottom:1px solid var(--border); letter-spacing:0.3px; }
+  .earn-day-head em { font-style:normal; font-size:8px; color:#fbbf24; border:1px solid rgba(251,191,36,0.5); border-radius:3px; padding:0 4px; margin-left:6px; letter-spacing:1px; }
+  .earn-day-count { font-size:9px; color:var(--text3); font-weight:400; }
+  .earn-row { display:grid; grid-template-columns:52px 1fr 34px 74px; gap:6px; align-items:center; padding:5px 10px; border-left:3px solid transparent; border-bottom:1px solid rgba(255,255,255,0.04); cursor:pointer; }
+  .earn-row:last-child { border-bottom:none; }
+  .earn-row:hover { background:rgba(255,255,255,0.04); }
+  .earn-sym { font-size:12px; font-weight:700; color:var(--text); }
+  .earn-mid { display:flex; flex-direction:column; min-width:0; }
+  .earn-name { font-size:10px; color:var(--text2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .earn-grp { font-size:8px; letter-spacing:0.5px; text-transform:uppercase; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .earn-sess { font-size:8px; font-weight:700; text-align:center; border-radius:3px; padding:1px 0; letter-spacing:0.5px; }
+  .earn-sess.bmo { color:#38bdf8; background:rgba(56,189,248,0.12); }
+  .earn-sess.amc { color:#c084fc; background:rgba(192,132,252,0.12); }
+  .earn-sess.tbd { color:var(--text3); background:rgba(255,255,255,0.05); }
+  .earn-eps { font-size:10.5px; font-weight:600; color:var(--text); text-align:right; display:flex; flex-direction:column; }
+  .earn-eps small { font-size:8px; font-weight:400; color:var(--text3); }
+  .earn-empty { grid-column:1/-1; font-size:11px; color:var(--text3); font-style:italic; padding:8px 2px; }
+  .earn-empty.err { color:var(--red); font-style:normal; line-height:1.6; }
+  .earn-empty.err span { color:var(--text3); font-size:9.5px; }
+  .earn-source { font-size:9px; color:var(--text3); margin-top:8px; }
 
   /* Options Flow Panel */
   .options-panel { display:none; border-bottom:1px solid var(--border); background:var(--bg2); padding:12px 28px 16px; }
@@ -182,9 +196,6 @@
   .btn-options:hover { border-color:#f472b6; color:#f472b6; }
   .btn-options.active { border-color:#f472b6; color:#f472b6; background:rgba(244,114,182,0.07); }
   .btn-options.computing { opacity:0.6; pointer-events:none; }
-  .btn-corr:hover { border-color:#67e8f9; color:#67e8f9; }
-  .btn-corr.active { border-color:#67e8f9; color:#67e8f9; background:rgba(103,232,249,0.07); }
-  .btn-corr.computing { opacity:0.6; pointer-events:none; }
   .btn-trends:hover { border-color:#818cf8; color:#818cf8; }
   .btn-trends.active { border-color:#818cf8; color:#818cf8; background:rgba(129,140,248,0.07); }
   .btn-trends.computing { opacity:0.6; pointer-events:none; }
@@ -323,6 +334,8 @@
   .watchlist-group-label::after { content:''; flex:1; height:1px; background:var(--border); }
   .watchlist-row { display:grid; grid-template-columns:48px 1fr 1fr 1fr; gap:2px; padding:4px 12px; border-bottom:1px solid rgba(255,255,255,0.03); cursor:pointer; transition:background 0.12s; align-items:center; }
   .watchlist-row:hover { background:var(--bg3); }
+  .watchlist-row.earn-soon { box-shadow:inset 3px 0 0 #fbbf24; }
+  .watchlist-row.earn-imminent { box-shadow:inset 3px 0 0 #ef4444; background:rgba(239,68,68,0.05); }
   .w-ticker { font-size:12.5px; font-weight:600; color:var(--text); display:flex; align-items:center; gap:3px; }
   .vol-spike { font-size:8px; color:#ff9800; background:rgba(255,152,0,0.15); border:1px solid rgba(255,152,0,0.4); border-radius:3px; padding:0 3px; line-height:14px; font-weight:700; flex-shrink:0; }
   .w-val { font-size:12px; font-weight:600; text-align:right; }
@@ -411,7 +424,7 @@
     <button class="btn btn-movers" id="moversBtn"><span class="btn-icon">🔥</span> Theme Movers</button>
     <button class="btn btn-trump" id="trumpBtn"><span class="btn-icon">🇺🇸</span> Trump Daily</button>
     <button class="btn btn-news" id="newsBtn"><span class="btn-icon">📰</span> News & Filings</button>
-    <button class="btn btn-corr" id="corrBtn"><span class="btn-icon">🌡️</span> Heatmap</button>
+    <button class="btn btn-earn" id="earnBtn"><span class="btn-icon">📅</span> Earnings</button>
     <button class="btn btn-options" id="optionsBtn"><span class="btn-icon">🎯</span> Options Flow</button>
     <button class="btn btn-analysis" id="analysisBtn"><span class="btn-icon">🧠</span> Market Analysis</button>
     <button class="btn btn-trends" id="trendsBtn"><span class="btn-icon">📊</span> Sector Trends</button>
@@ -483,28 +496,28 @@
   </div>
 </div>
 
-<!-- Correlation Heatmap Panel (hidden by default) -->
-<div class="corr-panel" id="corrPanel">
-  <div class="corr-header">
-    <span class="corr-label">🌡️ Theme ETF Correlation Heatmap · Daily Returns</span>
-    <div style="display:flex;gap:10px;align-items:center">
-      <div class="corr-periods" id="corrPeriods">
-        <button class="corr-period-btn" data-p="21">1M</button>
-        <button class="corr-period-btn active" data-p="63">3M</button>
-        <button class="corr-period-btn" data-p="126">6M</button>
+<!-- Earnings Calendar Panel (hidden by default) -->
+<div class="earn-panel" id="earnPanel">
+  <div class="earn-header">
+    <span class="earn-label">📅 Earnings Calendar · Tracked Stocks</span>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <div class="earn-toggle" id="earnScope">
+        <button data-v="wl" class="active">Watchlist</button>
+        <button data-v="all">+ Theme holdings</button>
       </div>
-      <span class="corr-ts" id="corrTs"></span>
+      <div class="earn-toggle" id="earnRange">
+        <button data-v="7" class="active">7D</button>
+        <button data-v="14">14D</button>
+      </div>
+      <button class="earn-refresh" id="earnRefresh" title="Reload from Nasdaq">↻</button>
+      <span class="earn-ts" id="earnTs"></span>
     </div>
   </div>
-  <div class="corr-layout">
-    <div class="corr-canvas-wrap" id="corrWrap">
-      <canvas id="corrCanvas"></canvas>
-      <div class="corr-tip" id="corrTip"></div>
-    </div>
-    <div class="corr-insights" id="corrInsights">
-      <div style="font-size:11px;color:var(--text3);font-style:italic">Click "Heatmap" to compute correlations.</div>
-    </div>
+  <div class="earn-summary" id="earnSummary" style="display:none"></div>
+  <div class="earn-body" id="earnBody">
+    <div class="earn-empty">Loading earnings calendar…</div>
   </div>
+  <div class="earn-source">Source: Nasdaq earnings calendar · BMO = before market open, AMC = after market close · dates and consensus EPS are estimates and can change</div>
 </div>
 
 <!-- Options Flow Panel (hidden by default) -->
@@ -1899,7 +1912,10 @@ function renderWatchlist() {
       const spikeBadge = d.volSpike
         ? '<span class="vol-spike" title="Volume spike: ' + (d.volSpikeRatio ? d.volSpikeRatio.toFixed(1)+'x avg' : '') + '">⚡' + (d.volSpikeRatio ? d.volSpikeRatio.toFixed(1)+'x' : '') + '</span>'
         : '';
-      html += '<div class="watchlist-row" onclick="window.open(\'' + tvUrl(sym) + '\',\'_blank\')">' +
+      const ev = earnBySym[sym];
+      const earnCls = ev ? (ev.imminent ? ' earn-imminent' : ' earn-soon') : '';
+      const earnTip = ev ? ' title="Earnings ' + ev.label + '"' : '';
+      html += '<div class="watchlist-row' + earnCls + '"' + earnTip + ' onclick="window.open(\'' + tvUrl(sym) + '\',\'_blank\')">' +
         '<div class="w-ticker">' + sym + spikeBadge + '</div>' +
         '<div class="w-val ' + wlClass(d.d1) + '">' + wlFmt(d.d1) + '</div>' +
         '<div class="w-val ' + wlClass(d.d5) + '">' + wlFmt(d.d5) + '</div>' +
@@ -1955,266 +1971,224 @@ async function loadWatchlist() {
   }
 }
 
-// ─── CORRELATION HEATMAP ──────────────────────────────────────────────────────
-let corrVisible = false;
-let corrComputing = false;
-let corrPrices = null;      // [{sym, name, map:{date:close}}]
-let corrPeriod = 63;        // trading days: 21 / 63 / 126
-let corrSyms = [];          // [{sym, name}]
-let corrMatrix = null;      // NxN Pearson matrix
-let corrLayout = null;      // {LBL, TOP, cell}
-let corrHover = null;       // {i, j}
+// ─── EARNINGS CALENDAR ────────────────────────────────────────────────────────
+// Source: Nasdaq public earnings calendar, fetched through the Cloudflare Worker.
+// One request per day returns every US company reporting that day; we keep only tracked tickers.
+const EARN_CACHE_KEY = 'earn_cal_v1';
+const EARN_CACHE_MS  = 4 * 60 * 60 * 1000;
+let earnVisible = false;
+let earnLoading = false;
+let earnData  = null;   // { today, days:{ 'YYYY-MM-DD': [row,...] }, fetched, errors, lastError }
+let earnBySym = {};     // watchlist ticker -> next report within 7 days (drives the row markers)
+let earnScope = 'wl';   // 'wl' = watchlist only, 'all' = watchlist + theme holdings
+let earnRange = 7;      // calendar days shown in the panel
 
-async function fetchDailyCloses(sym) {
-  const data = await fetchOne(`${YF_BASE}/v8/finance/chart/${sym}?range=6mo&interval=1d`);
-  const r = data?.chart?.result?.[0];
-  if (!r) return null;
-  const ts = r.timestamp ?? [];
-  const cl = r.indicators?.quote?.[0]?.close ?? [];
-  const map = {};
-  ts.forEach((t, i) => {
-    if (cl[i] != null) map[new Date(t * 1000).toISOString().slice(0, 10)] = cl[i];
+const earnEsc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+// Dates are handled as US-Eastern YYYY-MM-DD strings (Nasdaq's reporting calendar is Eastern)
+function etToday() { return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }); }
+function ymdAdd(ymd, n) { const d = new Date(ymd + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+function ymdIsWeekend(ymd) { const w = new Date(ymd + 'T12:00:00Z').getUTCDay(); return w === 0 || w === 6; }
+function ymdDiff(a, b) { return Math.round((new Date(a + 'T12:00:00Z') - new Date(b + 'T12:00:00Z')) / 86400000); }
+function fmtEarnDay(ymd) {
+  return new Date(ymd + 'T12:00:00Z').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', timeZone:'UTC' }).replace(',', '');
+}
+function earnWindow(today, calDays) {
+  const out = [];
+  for (let i = 0; i < calDays; i++) { const d = ymdAdd(today, i); if (!ymdIsWeekend(d)) out.push(d); }
+  return out;
+}
+function parseCap(s) { const n = parseFloat(String(s ?? '').replace(/[^0-9.]/g, '')); return isFinite(n) ? n : 0; }
+function fmtCap(n) { return n >= 1e12 ? (n/1e12).toFixed(2)+'T' : n >= 1e9 ? (n/1e9).toFixed(1)+'B' : n >= 1e6 ? (n/1e6).toFixed(0)+'M' : ''; }
+
+// Which tickers we care about, and why (watchlist group and/or theme holding)
+function earnMeta() {
+  const m = Object.create(null);
+  WATCHLIST.forEach(g => g.tickers.forEach(s => {
+    if (!m[s]) m[s] = { wl: false, groups: [], themes: [] };
+    m[s].wl = true;
+    if (!m[s].groups.some(x => x.name === g.group)) m[s].groups.push({ name: g.group, color: g.color });
+  }));
+  THEMES.forEach(t => t.holdings.forEach(s => {
+    if (!m[s]) m[s] = { wl: false, groups: [], themes: [] };
+    if (!m[s].themes.some(x => x.name === t.name)) m[s].themes.push({ name: t.name, color: t.color });
+  }));
+  return m;
+}
+
+function normEarnRow(r, date) {
+  const t = String(r.time || '').toLowerCase();
+  return {
+    sym: r.symbol, name: r.name || '', date,
+    session: t.includes('pre') ? 'BMO' : t.includes('after') ? 'AMC' : 'TBD',
+    eps: r.epsForecast || '', ests: r.noOfEsts || '', prev: r.lastYearEPS || '',
+    cap: parseCap(r.marketCap), qtr: r.fiscalQuarterEnding || '',
+  };
+}
+
+async function fetchEarnDay(date) {
+  const url = 'https://api.nasdaq.com/api/calendar/earnings?date=' + date;
+  const res = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(12000) });
+  const text = await res.text();
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  let j;
+  try { j = JSON.parse(text); } catch { throw new Error('non-JSON response'); }
+  return j?.data?.rows ?? [];
+}
+
+function setEarnStatus(msg) {
+  const ts = document.getElementById('earnTs');
+  if (ts) ts.textContent = msg;
+}
+
+function rebuildEarnIndex() {
+  earnBySym = {};
+  if (!earnData?.days) return;
+  const wl = new Set(WATCHLIST.flatMap(g => g.tickers));
+  const nextSession = earnWindow(earnData.today, 6).find(d => d > earnData.today);  // next trading day (skips weekends)
+  Object.keys(earnData.days).sort().forEach(d => {
+    const away = ymdDiff(d, earnData.today);
+    if (away < 0 || away > 7) return;
+    earnData.days[d].forEach(r => {
+      if (!wl.has(r.sym) || earnBySym[r.sym]) return;
+      earnBySym[r.sym] = {
+        date: d, daysAway: away, imminent: d === earnData.today || d === nextSession,
+        label: fmtEarnDay(d) + (r.session !== 'TBD' ? ' · ' + r.session : '') + (r.eps ? ' · EPS est ' + r.eps : ''),
+      };
+    });
   });
-  return map;
 }
 
-function pearson(a, b) {
-  const n = a.length;
-  let sa = 0, sb = 0;
-  for (let i = 0; i < n; i++) { sa += a[i]; sb += b[i]; }
-  const ma = sa / n, mb = sb / n;
-  let num = 0, da = 0, db = 0;
-  for (let i = 0; i < n; i++) {
-    const x = a[i] - ma, y = b[i] - mb;
-    num += x * y; da += x * x; db += y * y;
-  }
-  return (da > 0 && db > 0) ? num / Math.sqrt(da * db) : 0;
-}
+function renderEarningsPanel() {
+  const body = document.getElementById('earnBody');
+  const sum  = document.getElementById('earnSummary');
+  if (!body || !earnData) return;
 
-function corrColor(v) {
-  const bg = [26, 34, 44], pos = [249, 115, 22], neg = [59, 130, 246];
-  const t = Math.min(1, Math.abs(v));
-  const tgt = v >= 0 ? pos : neg;
-  const c = bg.map((b, k) => Math.round(b + (tgt[k] - b) * t));
-  return `rgb(${c[0]},${c[1]},${c[2]})`;
-}
-
-function computeCorrMatrix() {
-  const ts = document.getElementById('corrTs');
-  if (!corrPrices?.length) return false;
-
-  // Drop ETFs with short history, then use only dates common to all remaining
-  const maxLen = Math.max(...corrPrices.map(r => Object.keys(r.map).length));
-  const kept = corrPrices.filter(r => Object.keys(r.map).length >= maxLen * 0.9);
-  let dates = Object.keys(kept[0].map);
-  for (const r of kept) dates = dates.filter(d => d in r.map);
-  dates.sort();
-  if (dates.length < 15 || kept.length < 4) return false;
-
-  const rets = kept.map(r => {
-    const a = [];
-    for (let i = 1; i < dates.length; i++) a.push(r.map[dates[i]] / r.map[dates[i - 1]] - 1);
-    return a;
-  });
-  const N = Math.min(corrPeriod, rets[0].length);
-  const sl = rets.map(a => a.slice(-N));
-
-  corrSyms = kept.map(r => ({ sym: r.sym, name: r.name }));
-  corrMatrix = sl.map((a, i) => sl.map((b, j) => i === j ? 1 : pearson(a, b)));
-
-  const dropped = corrPrices.length - kept.length;
-  ts.textContent = `${kept.length} ETFs · ${N} trading days · ${dates[dates.length - 1]}` +
-    (dropped ? ` · ${dropped} skipped (short history)` : '');
-  return true;
-}
-
-function drawCorrHeatmap() {
-  const canvas = document.getElementById('corrCanvas');
-  const wrap = document.getElementById('corrWrap');
-  if (!canvas || !corrMatrix) return;
-  const n = corrSyms.length;
-  const LBL = 46, TOP = 46;
-  const W = wrap.clientWidth || 700;
-  const cell = Math.max(14, Math.min(26, Math.floor((W - LBL - 4) / n)));
-  const cw = LBL + cell * n + 4, ch = TOP + cell * n + 4;
-  const dpr = devicePixelRatio || 1;
-  canvas.width = cw * dpr; canvas.height = ch * dpr;
-  canvas.style.width = cw + 'px'; canvas.style.height = ch + 'px';
-  const ctx = canvas.getContext('2d');
-  ctx.scale(dpr, dpr);
-  ctx.clearRect(0, 0, cw, ch);
-  corrLayout = { LBL, TOP, cell };
-
-  // Cells
-  for (let i = 0; i < n; i++) {
-    for (let j = 0; j < n; j++) {
-      const v = corrMatrix[i][j];
-      const x = LBL + j * cell, y = TOP + i * cell;
-      ctx.fillStyle = i === j ? '#2a3441' : corrColor(v);
-      ctx.fillRect(x, y, cell - 1, cell - 1);
-      if (cell >= 21 && i !== j) {
-        ctx.fillStyle = 'rgba(255,255,255,0.78)';
-        ctx.font = '7px monospace';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(Math.round(v * 100), x + (cell - 1) / 2, y + (cell - 1) / 2);
-      }
-    }
-  }
-
-  // Labels (highlight the hovered row/column)
-  ctx.font = '8px monospace';
-  corrSyms.forEach((s, k) => {
-    const hot = corrHover && (corrHover.i === k || corrHover.j === k);
-    ctx.fillStyle = hot ? '#67e8f9' : 'rgba(180,200,220,0.7)';
-    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-    ctx.fillText(s.sym, LBL - 4, TOP + k * cell + (cell - 1) / 2);
-    ctx.save();
-    ctx.translate(LBL + k * cell + (cell - 1) / 2, TOP - 4);
-    ctx.rotate(-Math.PI / 2);
-    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.fillText(s.sym, 0, 0);
-    ctx.restore();
-  });
-
-  // Hover outline
-  if (corrHover) {
-    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5;
-    ctx.strokeRect(LBL + corrHover.j * cell, TOP + corrHover.i * cell, cell - 1, cell - 1);
-  }
-}
-
-function renderCorrInsights() {
-  const el = document.getElementById('corrInsights');
-  if (!corrMatrix) return;
-  const n = corrSyms.length;
-  const pairs = [];
-  let sum = 0;
-  const rowAvg = new Array(n).fill(0);
-  for (let i = 0; i < n; i++) {
-    for (let j = 0; j < n; j++) {
-      if (i === j) continue;
-      rowAvg[i] += corrMatrix[i][j] / (n - 1);
-      if (j > i) { pairs.push({ a: corrSyms[i].sym, b: corrSyms[j].sym, v: corrMatrix[i][j] }); sum += corrMatrix[i][j]; }
-    }
-  }
-  const avg = sum / pairs.length;
-  const sorted = [...pairs].sort((x, y) => y.v - x.v);
-  const hi = sorted.slice(0, 6);
-  const lo = sorted.slice(-6).reverse();
-  const indep = corrSyms.map((s, i) => ({ sym: s.sym, v: rowAvg[i] })).sort((x, y) => x.v - y.v).slice(0, 4);
-
-  const row = (label, v, color) =>
-    `<div class="corr-ins-row"><span class="corr-ins-pair">${label}</span><span class="corr-ins-val" style="color:${color}">${v >= 0 ? '+' : ''}${v.toFixed(2)}</span></div>`;
-
-  const regime = avg > 0.7
-    ? 'Highly correlated: themes are moving together on macro / risk-on-off flows, so holding several themes adds little diversification.'
-    : avg > 0.45
-      ? 'Moderately correlated: a normal mix of macro-driven and theme-specific moves.'
-      : 'Low correlation: high dispersion, themes are trading on their own drivers (a stock/theme-picking market).';
-
-  el.innerHTML = `
-    <div class="corr-ins-title" style="color:#f97316">▲ Most correlated pairs</div>
-    ${hi.map(p => row(`${p.a} ↔ ${p.b}`, p.v, '#f97316')).join('')}
-    <div class="corr-ins-title" style="color:#60a5fa">▼ Best diversifiers (lowest)</div>
-    ${lo.map(p => row(`${p.a} ↔ ${p.b}`, p.v, '#60a5fa')).join('')}
-    <div class="corr-ins-title" style="color:var(--text3)">Most independent ETFs</div>
-    ${indep.map(p => row(p.sym + ' · avg corr', p.v, 'var(--text2)')).join('')}
-    <div class="corr-note"><strong style="color:var(--text)">Avg pairwise correlation: ${avg.toFixed(2)}</strong><br>${regime}</div>
-    <div class="corr-legend"></div>
-    <div class="corr-legend-labels"><span>-1</span><span>0</span><span>+1</span></div>
-  `;
-}
-
-function setupCorrInteraction() {
-  const canvas = document.getElementById('corrCanvas');
-  const tip = document.getElementById('corrTip');
-  if (!canvas || canvas.dataset.bound) return;
-  canvas.dataset.bound = '1';
-
-  canvas.addEventListener('mousemove', e => {
-    if (!corrMatrix || !corrLayout) return;
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left, y = e.clientY - rect.top;
-    const j = Math.floor((x - corrLayout.LBL) / corrLayout.cell);
-    const i = Math.floor((y - corrLayout.TOP) / corrLayout.cell);
-    const n = corrSyms.length;
-    if (i < 0 || j < 0 || i >= n || j >= n) {
-      tip.style.display = 'none';
-      if (corrHover) { corrHover = null; drawCorrHeatmap(); }
-      return;
-    }
-    if (!corrHover || corrHover.i !== i || corrHover.j !== j) {
-      corrHover = { i, j };
-      drawCorrHeatmap();
-    }
-    const v = corrMatrix[i][j];
-    tip.innerHTML = `<strong>${corrSyms[i].sym}</strong> ${corrSyms[i].name}<br><strong>${corrSyms[j].sym}</strong> ${corrSyms[j].name}<br>` +
-      (i === j ? 'same ETF' : `correlation: <strong style="color:${v >= 0 ? '#f97316' : '#60a5fa'}">${v >= 0 ? '+' : ''}${v.toFixed(2)}</strong>`);
-    tip.style.display = 'block';
-    tip.style.left = Math.min(x + 14, canvas.clientWidth - 190) + 'px';
-    tip.style.top = (y + 14) + 'px';
-  });
-  canvas.addEventListener('mouseleave', () => {
-    tip.style.display = 'none';
-    if (corrHover) { corrHover = null; drawCorrHeatmap(); }
-  });
-
-  document.getElementById('corrPeriods').addEventListener('click', e => {
-    const b = e.target.closest('.corr-period-btn');
-    if (!b) return;
-    corrPeriod = parseInt(b.dataset.p);
-    document.querySelectorAll('.corr-period-btn').forEach(x => x.classList.toggle('active', x === b));
-    if (corrPrices && computeCorrMatrix()) { drawCorrHeatmap(); renderCorrInsights(); }
-  });
-
-  window.addEventListener('resize', () => { if (corrVisible) drawCorrHeatmap(); });
-}
-
-async function loadCorrHeatmap() {
-  if (corrComputing) return;
-  setupCorrInteraction();
-
-  // Reuse fetched prices if we already have them
-  if (corrPrices) {
-    if (computeCorrMatrix()) { drawCorrHeatmap(); renderCorrInsights(); }
+  if (!Object.keys(earnData.days).length) {
+    body.innerHTML = `<div class="earn-empty err">✗ Could not load the earnings calendar (${earnEsc(earnData.lastError || 'no response')}).<br><span>Make sure the updated worker.js (with api.nasdaq.com allowed) is deployed to Cloudflare, then click ↻.</span></div>`;
+    sum.style.display = 'none';
+    setEarnStatus('Failed');
     return;
   }
 
-  corrComputing = true;
-  document.getElementById('corrBtn').classList.add('computing');
-  document.getElementById('corrTs').textContent = 'Fetching 6 months of prices…';
+  const meta  = earnMeta();
+  const today = earnData.today;
+  const dates = earnWindow(today, earnRange).filter(d => d in earnData.days);
 
-  // Unique ETFs across all themes
-  const seen = new Set(), etfs = [];
-  THEMES.forEach(t => { if (!seen.has(t.etf)) { seen.add(t.etf); etfs.push({ sym: t.etf, name: t.name }); } });
+  const byDay = {};
+  let total = 0;
+  dates.forEach(d => {
+    const rows = earnData.days[d]
+      .filter(r => meta[r.sym] && (earnScope === 'all' || meta[r.sym].wl))
+      .sort((a, b) => (meta[b.sym].wl - meta[a.sym].wl) || (b.cap - a.cap));
+    if (rows.length) { byDay[d] = rows; total += rows.length; }
+  });
+  const shownDates = dates.filter(d => byDay[d]);
 
-  const results = await Promise.all(etfs.map(async e => {
-    try { return { ...e, map: await fetchDailyCloses(e.sym) }; }
-    catch { return { ...e, map: null }; }
-  }));
-  corrPrices = results.filter(r => r.map && Object.keys(r.map).length > 30);
+  // Summary strip
+  const scopeLabel = earnScope === 'wl' ? 'watchlist stocks' : 'tracked stocks';
+  const todayN = byDay[today]?.length ?? 0;
+  const nextD  = dates.find(d => d > today);
+  const nextN  = nextD ? (byDay[nextD]?.length ?? 0) : 0;
+  const busiest = shownDates.slice().sort((a, b) => byDay[b].length - byDay[a].length)[0];
+  sum.style.display = 'block';
+  sum.innerHTML = total
+    ? `<b>${total}</b> ${scopeLabel} report in the next ${earnRange} days · Today <b>${todayN}</b>${nextD ? ` · ${fmtEarnDay(nextD)} <b>${nextN}</b>` : ''} · Busiest: <b>${fmtEarnDay(busiest)} (${byDay[busiest].length})</b>
+       <div class="earn-legend">Watchlist rows show a <span style="color:#fbbf24">yellow</span> edge when reporting within 7 days and a <span style="color:#ef4444">red</span> edge today or the next trading day. Hover a row for the date and EPS estimate.</div>`
+    : `No ${scopeLabel} report in the next ${earnRange} days.${earnScope === 'wl' ? ' Try "+ Theme holdings" or 14D.' : ''}`;
 
-  if (computeCorrMatrix()) {
-    drawCorrHeatmap();
-    renderCorrInsights();
+  if (!total) {
+    body.innerHTML = '<div class="earn-empty">Nothing scheduled in this window.</div>';
   } else {
-    corrPrices = null;
-    document.getElementById('corrInsights').innerHTML =
-      '<div style="font-size:11px;color:var(--red)">✗ Could not load enough ETF price history. Try again in a moment.</div>';
-    document.getElementById('corrTs').textContent = 'Failed';
+    body.innerHTML = shownDates.map(d => {
+      const rows = byDay[d].map(r => {
+        const m = meta[r.sym];
+        const g = m.wl ? m.groups[0] : (m.themes[0] || { name: '', color: '#6a8aa0' });
+        const names = (m.wl ? m.groups : m.themes).map(x => x.name).join(' / ');
+        const tip = [r.name, names, r.qtr && 'FQ ' + r.qtr, r.ests && r.ests + ' estimates', r.prev && 'year-ago EPS ' + r.prev].filter(Boolean).join(' · ');
+        return `<div class="earn-row" style="border-left-color:${g.color}" title="${earnEsc(tip)}" onclick="window.open('${tvUrl(r.sym)}','_blank')">
+          <span class="earn-sym">${earnEsc(r.sym)}</span>
+          <span class="earn-mid"><span class="earn-name">${earnEsc(r.name)}</span><span class="earn-grp" style="color:${g.color}">${earnEsc(names)}</span></span>
+          <span class="earn-sess ${r.session.toLowerCase()}">${r.session}</span>
+          <span class="earn-eps">${r.eps ? earnEsc(r.eps) : '—'}${r.cap ? `<small>${fmtCap(r.cap)}</small>` : ''}</span>
+        </div>`;
+      }).join('');
+      return `<div class="earn-day${d === today ? ' today' : ''}">
+        <div class="earn-day-head"><span>${fmtEarnDay(d)}${d === today ? '<em>TODAY</em>' : ''}</span><span class="earn-day-count">${byDay[d].length} reporting</span></div>
+        ${rows}
+      </div>`;
+    }).join('');
   }
 
-  corrComputing = false;
-  document.getElementById('corrBtn').classList.remove('computing');
+  const when = new Date(earnData.fetched).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+  setEarnStatus(`updated ${when}` + (earnData.errors ? ` · ${earnData.errors} day(s) failed` : ''));
 }
 
-document.getElementById('corrBtn').addEventListener('click', () => {
-  corrVisible = !corrVisible;
-  document.getElementById('corrPanel').classList.toggle('visible', corrVisible);
-  document.getElementById('corrBtn').classList.toggle('active', corrVisible);
-  if (corrVisible) loadCorrHeatmap();
-});
+function afterEarnLoad() {
+  rebuildEarnIndex();
+  renderWatchlist();          // refresh row markers
+  renderEarningsPanel();
+}
+
+async function loadEarningsCalendar(force = false) {
+  if (earnLoading) return;
+  const today = etToday();
+
+  if (!force) {
+    try {
+      const c = JSON.parse(localStorage.getItem(EARN_CACHE_KEY) || 'null');
+      if (c && c.today === today && c.days && Date.now() - c.fetched < EARN_CACHE_MS) {
+        earnData = c; afterEarnLoad(); return;
+      }
+    } catch {}
+  }
+
+  earnLoading = true;
+  setEarnStatus('loading…');
+  const meta  = earnMeta();
+  const dates = earnWindow(today, 14);
+  const days = {};
+  let errors = 0, lastError = '';
+
+  // Small batches keep us polite to Nasdaq
+  for (let i = 0; i < dates.length; i += 4) {
+    const chunk = dates.slice(i, i + 4);
+    const res = await Promise.allSettled(chunk.map(d => fetchEarnDay(d)));
+    res.forEach((r, k) => {
+      if (r.status === 'fulfilled') {
+        days[chunk[k]] = (r.value || []).filter(row => row && meta[row.symbol]).map(row => normEarnRow(row, chunk[k]));
+      } else {
+        errors++; lastError = r.reason?.message || 'request failed';
+      }
+    });
+  }
+
+  earnData = { today, days, fetched: Date.now(), errors, lastError };
+  if (errors === 0) { try { localStorage.setItem(EARN_CACHE_KEY, JSON.stringify(earnData)); } catch {} }
+  earnLoading = false;
+  afterEarnLoad();
+}
+
+(function initEarnings() {
+  const btn = document.getElementById('earnBtn');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    earnVisible = !earnVisible;
+    document.getElementById('earnPanel').classList.toggle('visible', earnVisible);
+    btn.classList.toggle('active', earnVisible);
+    if (earnVisible) { earnData ? renderEarningsPanel() : loadEarningsCalendar(); }
+  });
+  const bindToggle = (id, apply) => document.getElementById(id).addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    apply(b.dataset.v);
+    document.querySelectorAll('#' + id + ' button').forEach(x => x.classList.toggle('active', x === b));
+    renderEarningsPanel();
+  });
+  bindToggle('earnScope', v => { earnScope = v; });
+  bindToggle('earnRange', v => { earnRange = parseInt(v); });
+  document.getElementById('earnRefresh').addEventListener('click', () => loadEarningsCalendar(true));
+})();
 
 // ─── OPTIONS FLOW ─────────────────────────────────────────────────────────────
 const OPTIONS_TICKERS = [
@@ -3266,6 +3240,7 @@ loadSentiment();
 loadAll();
 loadWatchlist();
 setupSentimentClicks();
+setTimeout(() => loadEarningsCalendar(), 4000);  // background load so watchlist row markers appear
 
 </script>
 </body>
