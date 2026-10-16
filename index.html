@@ -324,21 +324,25 @@
   .content-wrap { display:flex; align-items:flex-start; }
 
   /* Watchlist */
-  .watchlist-panel { width:520px; flex-shrink:0; border-right:1px solid var(--border); position:sticky; top:48px; height:calc(100vh - 48px); overflow-y:auto; background:var(--bg2); }
-  .watchlist-header { padding:8px 12px 4px; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--bg2); z-index:10; }
-  .watchlist-title { font-size:11px; color:var(--text3); letter-spacing:1.5px; text-transform:uppercase; margin-bottom:4px; }
-  .watchlist-cols { display:grid; grid-template-columns:44px 1fr 1fr 1fr; }
+  .watchlist-panel { --wl-cols:72px repeat(3,1fr) 38px 38px; --wl-pad:10px; width:630px; flex-shrink:0; border-right:1px solid var(--border); position:sticky; top:48px; height:calc(100vh - 48px); overflow-y:auto; background:var(--bg2); }
+  .watchlist-header { padding:8px 0 4px; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--bg2); z-index:10; }
+  .watchlist-title { font-size:11px; color:var(--text3); letter-spacing:1.5px; text-transform:uppercase; margin-bottom:4px; padding:0 var(--wl-pad); display:flex; justify-content:space-between; align-items:baseline; }
+  .wl-spx-ref { font-size:9px; letter-spacing:0.5px; text-transform:none; color:var(--text3); }
+  .watchlist-colhead { display:grid; grid-template-columns:1fr 1fr; }
+  .watchlist-colhead .watchlist-cols:first-child { border-right:1px solid var(--border); }
+  .watchlist-cols { display:grid; grid-template-columns:var(--wl-cols); gap:2px; padding:0 var(--wl-pad); }
   .wcol-label { font-size:9px; color:var(--text3); letter-spacing:0.8px; text-transform:uppercase; text-align:right; }
   .wcol-label:first-child { text-align:left; }
-  .watchlist-group-label { font-size:9.5px; color:var(--text3); letter-spacing:1.5px; text-transform:uppercase; padding:6px 12px 2px; background:var(--bg2); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:5px; }
+  .watchlist-group-label { font-size:9.5px; color:var(--text3); letter-spacing:1.5px; text-transform:uppercase; padding:6px var(--wl-pad) 2px; background:var(--bg2); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:5px; }
   .watchlist-group-label::after { content:''; flex:1; height:1px; background:var(--border); }
-  .watchlist-row { display:grid; grid-template-columns:48px 1fr 1fr 1fr; gap:2px; padding:4px 12px; border-bottom:1px solid rgba(255,255,255,0.03); cursor:pointer; transition:background 0.12s; align-items:center; }
+  .watchlist-row { display:grid; grid-template-columns:var(--wl-cols); gap:2px; padding:4px var(--wl-pad); border-bottom:1px solid rgba(255,255,255,0.03); cursor:pointer; transition:background 0.12s; align-items:center; }
   .watchlist-row:hover { background:var(--bg3); }
   .watchlist-row.earn-soon { box-shadow:inset 3px 0 0 #fbbf24; }
   .watchlist-row.earn-imminent { box-shadow:inset 3px 0 0 #ef4444; background:rgba(239,68,68,0.05); }
   .w-ticker { font-size:12.5px; font-weight:600; color:var(--text); display:flex; align-items:center; gap:3px; }
   .vol-spike { font-size:8px; color:#ff9800; background:rgba(255,152,0,0.15); border:1px solid rgba(255,152,0,0.4); border-radius:3px; padding:0 3px; line-height:14px; font-weight:700; flex-shrink:0; }
   .w-val { font-size:12px; font-weight:600; text-align:right; }
+  .w-val.w-rs { font-size:11px; }
   .w-val.pos { color:var(--green); }
   .w-val.neg { color:var(--red); }
   .w-val.flat { color:var(--text3); }
@@ -402,6 +406,9 @@
   }
   @media (max-width:600px) {
     .watchlist-columns { grid-template-columns:1fr; }
+    .watchlist-colhead { grid-template-columns:1fr; }
+    .watchlist-colhead .watchlist-cols:last-child { display:none; }
+    .watchlist-colhead .watchlist-cols:first-child { border-right:none; }
     .market-overview { grid-template-columns:1fr; padding:10px 16px; }
     .bar-pct { width:52px; }
   }
@@ -636,12 +643,18 @@
   <!-- Watchlist sidebar -->
   <div class="watchlist-panel">
     <div class="watchlist-header">
-      <div class="watchlist-title">▸ Watchlist</div>
-      <div class="watchlist-cols">
-        <div class="wcol-label">Ticker</div>
-        <div class="wcol-label">1D%</div>
-        <div class="wcol-label">5D%</div>
-        <div class="wcol-label">52W↓</div>
+      <div class="watchlist-title"><span>▸ Watchlist</span><span class="wl-spx-ref" id="wlSpxRef" title="S&amp;P 500 return over the same windows"></span></div>
+      <div class="watchlist-colhead">
+        <div class="watchlist-cols">
+          <div class="wcol-label">Ticker</div><div class="wcol-label">1D%</div><div class="wcol-label">5D%</div><div class="wcol-label">52W↓</div>
+          <div class="wcol-label" title="Relative strength vs SPX: stock 1M % minus S&amp;P 500 1M % (21 sessions), in percentage points">RS 1M</div>
+          <div class="wcol-label" title="Relative strength vs SPX: stock 3M % minus S&amp;P 500 3M % (63 sessions), in percentage points">RS 3M</div>
+        </div>
+        <div class="watchlist-cols">
+          <div class="wcol-label">Ticker</div><div class="wcol-label">1D%</div><div class="wcol-label">5D%</div><div class="wcol-label">52W↓</div>
+          <div class="wcol-label" title="Relative strength vs SPX: stock 1M % minus S&amp;P 500 1M % (21 sessions), in percentage points">RS 1M</div>
+          <div class="wcol-label" title="Relative strength vs SPX: stock 3M % minus S&amp;P 500 3M % (63 sessions), in percentage points">RS 3M</div>
+        </div>
       </div>
     </div>
     <div id="watchlistBody"></div>
@@ -1894,6 +1907,30 @@ const WATCHLIST = [
 ];
 const wlData = {};
 
+let wlSpx = { r1:null, r3:null };   // S&P 500 1M / 3M % change (benchmark for relative strength)
+
+// % change from n sessions ago to the latest close
+function pctBack(closes, n) {
+  if (!closes || closes.length <= n) return null;          // not enough history (e.g. recent IPO)
+  const base = closes[closes.length - 1 - n], last = closes[closes.length - 1];
+  return base > 0 ? (last / base - 1) * 100 : null;
+}
+// Relative strength in percentage points, compact (no % sign) to fit the narrow column
+function rsFmt(v) {
+  if (v == null) return '···';
+  if (Math.abs(v) >= 100) return (v >= 0 ? '+' : '') + Math.round(v);
+  const r = Math.round(v * 10) / 10;
+  return r === 0 ? '0.0' : (r > 0 ? '+' : '') + r.toFixed(1);
+}
+function rsTip(sym, lbl, r, s, rs) {
+  if (rs == null) return '';
+  return ' title="' + sym + ' ' + lbl + ' ' + wlFmt(r) + ' vs SPX ' + wlFmt(s) + ' → ' + (rs >= 0 ? '+' : '') + rs.toFixed(1) + ' pts relative"';
+}
+function updateWlSpxRef() {
+  const el = document.getElementById('wlSpxRef');
+  if (el && wlSpx.r1 != null) el.textContent = 'SPX 1M ' + wlFmt(wlSpx.r1) + ' · 3M ' + wlFmt(wlSpx.r3);
+}
+
 function wlClass(v) { if (v==null) return 'loading'; if (v>0.05) return 'pos'; if (v<-0.05) return 'neg'; return 'flat'; }
 function wlFmt(v, decimals=1) { return v!=null ? (v>=0?'+':'')+v.toFixed(decimals)+'%' : '···'; }
 
@@ -1920,6 +1957,8 @@ function renderWatchlist() {
         '<div class="w-val ' + wlClass(d.d1) + '">' + wlFmt(d.d1) + '</div>' +
         '<div class="w-val ' + wlClass(d.d5) + '">' + wlFmt(d.d5) + '</div>' +
         '<div class="w-val ' + wlClass(d.w52 != null ? -d.w52 : null) + '">' + (d.w52!=null ? '-'+d.w52.toFixed(1)+'%' : '···') + '</div>' +
+        '<div class="w-val w-rs ' + wlClass(d.rs1m) + '"' + rsTip(sym, '1M', d.r1m, wlSpx.r1, d.rs1m) + '>' + rsFmt(d.rs1m) + '</div>' +
+        '<div class="w-val w-rs ' + wlClass(d.rs3m) + '"' + rsTip(sym, '3M', d.r3m, wlSpx.r3, d.rs3m) + '>' + rsFmt(d.rs3m) + '</div>' +
       '</div>';
     }
     return html;
@@ -1934,8 +1973,13 @@ function renderWatchlist() {
 
 async function loadWatchlist() {
   const syms = [...new Set(WATCHLIST.flatMap(g=>g.tickers))];
-  for (const sym of syms) wlData[sym] = { d1:null, d5:null, w52:null };
+  for (const sym of syms) wlData[sym] = { d1:null, d5:null, w52:null, r1m:null, r3m:null, rs1m:null, rs3m:null };
   renderWatchlist();
+
+  // S&P 500 benchmark for relative strength. Same 1Y daily series and same 21/63-session windows as each stock.
+  const spxP = fetchQuoteHistory('%5EGSPC', '1y')
+    .then(h => { wlSpx = { r1: pctBack(h, 21), r3: pctBack(h, 63) }; updateWlSpxRef(); return wlSpx; })
+    .catch(e => { console.warn('[wl spx]', e.message); return { r1: null, r3: null }; });
 
   const run = async (sym) => {
     try {
@@ -1958,7 +2002,12 @@ async function loadWatchlist() {
       // Volume spike: flag if today's volume > 2x 20-day average
       const volSpike     = vol.spikeRatio != null && vol.spikeRatio >= 2;
       const volSpikeRatio = vol.spikeRatio;
-      wlData[sym] = { d1, d5, w52, volSpike, volSpikeRatio };
+      // Relative strength vs SPX (percentage points). Reuses the 1Y history already fetched above.
+      const spx = await spxP;
+      const r1m = pctBack(hist1y, 21), r3m = pctBack(hist1y, 63);
+      const rs1m = (r1m != null && spx.r1 != null) ? r1m - spx.r1 : null;
+      const rs3m = (r3m != null && spx.r3 != null) ? r3m - spx.r3 : null;
+      wlData[sym] = { d1, d5, w52, volSpike, volSpikeRatio, r1m, r3m, rs1m, rs3m };
     } catch(e) { console.warn('[wl]', sym, e.message); }
     renderWatchlist();
     renderWlTopPerformers();
