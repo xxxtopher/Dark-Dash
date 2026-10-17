@@ -239,6 +239,16 @@
   .sm-meta { font-size:9px; color:var(--text3); margin-top:8px; display:flex; justify-content:space-between; }
   .sm-close { position:absolute; top:12px; right:16px; background:none; border:none; color:var(--text3); font-size:18px; cursor:pointer; line-height:1; }
   .sm-close:hover { color:var(--text); }
+  .sm-toggle { position:absolute; top:11px; right:50px; display:flex; gap:4px; }
+  .sm-toggle button { background:var(--bg3); border:1px solid var(--border); color:var(--text3); font-family:inherit; font-size:9px; padding:2px 9px; border-radius:3px; cursor:pointer; letter-spacing:0.5px; }
+  .sm-toggle button:hover { color:var(--text); }
+  .sm-toggle button.active { border-color:var(--accent); color:var(--accent); }
+  .sm-canvas-wrap canvas { display:block; cursor:crosshair; }
+  .sm-cross { position:absolute; width:1px; background:rgba(255,255,255,0.2); pointer-events:none; display:none; }
+  .sm-tip { position:absolute; top:6px; background:rgba(13,17,23,0.96); border:1px solid var(--border); border-radius:4px; padding:5px 9px; font-size:9.5px; color:var(--text); pointer-events:none; display:none; white-space:nowrap; z-index:5; line-height:1.6; }
+  .sm-tip b { color:var(--text); }
+  .sm-tip .up { color:var(--green); } .sm-tip .dn { color:var(--red); }
+  .sm-meta span:first-child { flex:1; padding-right:10px; }
   .sent-top { display:flex; justify-content:space-between; align-items:flex-start; gap:6px; }
   .sent-label { font-size:10px; color:var(--text2); letter-spacing:1.5px; text-transform:uppercase; margin-bottom:3px; white-space:nowrap; font-weight:600; }
   .sent-price { font-size:13px; font-weight:700; color:var(--text); letter-spacing:-0.3px; white-space:nowrap; }
@@ -498,7 +508,12 @@
   <div class="sm-modal">
     <button class="sm-close" onclick="document.getElementById('smOverlay').classList.remove('visible')">✕</button>
     <div class="sm-title" id="smTitle">3-Month Trend</div>
-    <div class="sm-canvas-wrap"><canvas id="smCanvas"></canvas></div>
+    <div class="sm-toggle" id="smToggle"><button data-m="candle">Candles</button><button data-m="line">Line</button></div>
+    <div class="sm-canvas-wrap">
+      <canvas id="smCanvas"></canvas>
+      <div class="sm-cross" id="smCross"></div>
+      <div class="sm-tip" id="smTip"></div>
+    </div>
     <div class="sm-meta"><span id="smMeta"></span><span id="smSource">Source: Yahoo Finance</span></div>
   </div>
 </div>
@@ -3078,91 +3093,194 @@ const SENTIMENT_TICKERS = [
 // Sentiment cells that support 3-month chart (Gold, Silver, Oil, 10Y Yield)
 const SENT_CHART_IDS = new Set(['gold','silver','oil','tnx','btc','eth','dxy']);
 
+// ─── SENTIMENT 3-MONTH CHART (candles / line) ─────────────────────────────────
+let smState = { tk: null, pts: [], mode: 'candle' };   // pts: [{t,o,h,l,c}] daily bars
+try { if (localStorage.getItem('sm_chart_mode') === 'line') smState.mode = 'line'; } catch {}
+let smLayout = null;   // geometry of the last draw, used by the hover readout
+let smReq = 0;         // guards against a slow earlier response overwriting a newer click
+
+function fmtSmVal(tk, v) {
+  if (tk.id === 'tnx') return v.toFixed(3) + '%';
+  return v >= 1000 ? v.toLocaleString('en-US', { maximumFractionDigits: 0 }) : v.toFixed(2);
+}
+// Daily bars are stamped at the session start; UTC keeps the label on the correct trading date (incl. 24/7 crypto)
+const fmtSmDate = (t, long) => new Date(t * 1000).toLocaleDateString('en-US',
+  long ? { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' } : { month: 'short', day: 'numeric', timeZone: 'UTC' });
+
+function syncSmToggle() {
+  document.querySelectorAll('#smToggle button').forEach(b => b.classList.toggle('active', b.dataset.m === smState.mode));
+}
+
+function drawSentimentChart() {
+  const { tk, pts, mode } = smState;
+  const canvas = document.getElementById('smCanvas');
+  if (!canvas || !pts.length) return;
+  const candle = mode === 'candle';
+  const W = canvas.parentElement.clientWidth || 680, H = 200;
+  const dpr = devicePixelRatio || 1;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const N = pts.length;
+  const PAD = { top: 8, right: 10, bottom: 22, left: 52 };
+  const cW = W - PAD.left - PAD.right, cH = H - PAD.top - PAD.bottom;
+  // Candles need the full high/low envelope (plus a little headroom); the line only needs closes
+  const lo = candle ? Math.min(...pts.map(p => p.l)) : Math.min(...pts.map(p => p.c));
+  const hi = candle ? Math.max(...pts.map(p => p.h)) : Math.max(...pts.map(p => p.c));
+  const pad = candle ? (hi - lo) * 0.04 : 0;
+  const minV = lo - pad, maxV = hi + pad, range = (maxV - minV) || 1;
+  const step = cW / N;
+  const toX = i => candle ? PAD.left + (i + 0.5) * step : PAD.left + (i / (N - 1 || 1)) * cW;
+  const toY = v => PAD.top + (1 - (v - minV) / range) * cH;
+  smLayout = { PAD, cW, cH, N, step, candle, toX, toY };
+
+  // Horizontal grid + price labels
+  for (let s = 0; s <= 4; s++) {
+    const v = minV + s * range / 4, y = toY(v);
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + cW, y); ctx.stroke();
+    ctx.fillStyle = 'rgba(180,200,220,0.6)'; ctx.font = '8px monospace'; ctx.textAlign = 'right';
+    ctx.fillText(fmtSmVal(tk, v), PAD.left - 4, y + 3);
+  }
+
+  // Date labels (the final label is skipped if it would crowd the previous one)
+  const every = Math.ceil(N / 6);
+  ctx.fillStyle = 'rgba(180,200,220,0.5)'; ctx.font = '8px monospace';
+  pts.forEach((p, i) => {
+    if (i % every === 0 || (i === N - 1 && (N - 1) % every >= every * 0.6)) {
+      const x = toX(i), nearRight = x > W - 22;               // right-align the last label so it isn't clipped
+      ctx.textAlign = nearRight ? 'right' : 'center';
+      ctx.fillText(fmtSmDate(p.t), nearRight ? W - 2 : x, H - 4);
+    }
+  });
+
+  const first = pts[0], last = pts[N - 1];
+  if (candle) {
+    const bw = Math.max(2, Math.min(12, step * 0.7));
+    for (let i = 0; i < N; i++) {
+      const p = pts[i], x = toX(i), up = p.c >= p.o;
+      ctx.strokeStyle = up ? 'rgba(0,230,118,0.65)' : 'rgba(255,68,68,0.65)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x, toY(p.h)); ctx.lineTo(x, toY(p.l)); ctx.stroke();
+      ctx.fillStyle = up ? '#00e676' : '#ff4444';
+      const y1 = toY(p.o), y2 = toY(p.c);
+      ctx.fillRect(x - bw / 2, Math.min(y1, y2), bw, Math.max(1, Math.abs(y2 - y1)));
+    }
+    // Dashed line at the latest close so you can see where price sits in the range
+    ctx.setLineDash([3, 4]); ctx.strokeStyle = 'rgba(180,200,220,0.35)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(PAD.left, toY(last.c)); ctx.lineTo(PAD.left + cW, toY(last.c)); ctx.stroke();
+    ctx.setLineDash([]);
+  } else {
+    const lineColor = last.c >= first.c ? '#00e676' : '#ff4444';
+    const grad = ctx.createLinearGradient(0, PAD.top, 0, PAD.top + cH);
+    grad.addColorStop(0, lineColor + '44'); grad.addColorStop(1, lineColor + '00');
+    ctx.beginPath();
+    pts.forEach((p, i) => i === 0 ? ctx.moveTo(toX(i), toY(p.c)) : ctx.lineTo(toX(i), toY(p.c)));
+    ctx.lineTo(toX(N - 1), toY(minV)); ctx.lineTo(toX(0), toY(minV));
+    ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
+    ctx.beginPath();
+    pts.forEach((p, i) => i === 0 ? ctx.moveTo(toX(i), toY(p.c)) : ctx.lineTo(toX(i), toY(p.c)));
+    ctx.strokeStyle = lineColor; ctx.lineWidth = 2; ctx.stroke();
+    ctx.beginPath(); ctx.arc(toX(N - 1), toY(last.c), 3, 0, Math.PI * 2);
+    ctx.fillStyle = lineColor; ctx.fill();
+  }
+}
+
+function hideSmHover() {
+  const tip = document.getElementById('smTip'), cross = document.getElementById('smCross');
+  if (tip) tip.style.display = 'none';
+  if (cross) cross.style.display = 'none';
+}
+
+function setupSentimentChartEvents() {
+  const canvas = document.getElementById('smCanvas');
+  if (!canvas || canvas.dataset.bound) return;
+  canvas.dataset.bound = '1';
+  const tip = document.getElementById('smTip'), cross = document.getElementById('smCross');
+
+  canvas.addEventListener('mousemove', e => {
+    if (!smLayout || !smState.pts.length) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const { PAD, cW, cH, N, step, candle, toX } = smLayout;
+    const idx = candle ? Math.floor((mx - PAD.left) / step) : Math.round((mx - PAD.left) / cW * (N - 1));
+    if (mx < PAD.left || mx > PAD.left + cW || idx < 0 || idx >= N) { hideSmHover(); return; }
+
+    const tk = smState.tk, p = smState.pts[idx], prev = smState.pts[idx - 1];
+    const ref = prev ? prev.c : p.o;                                  // change vs previous close (open for the first bar)
+    const isY = tk.id === 'tnx';
+    const chg = isY ? (p.c - ref) * 100 : (p.c / ref - 1) * 100;
+    const chgStr = (chg >= 0 ? '+' : '') + chg.toFixed(isY ? 1 : 2) + (isY ? ' bp' : '%');
+    const rng = isY ? ((p.h - p.l) * 100).toFixed(1) + ' bp' : ((p.h - p.l) / p.c * 100).toFixed(2) + '%';
+    const f = v => fmtSmVal(tk, v);
+    tip.innerHTML = candle
+      ? `<b>${fmtSmDate(p.t, true)}</b><br>O ${f(p.o)} &nbsp; H ${f(p.h)}<br>L ${f(p.l)} &nbsp; C ${f(p.c)}<br><span class="${chg >= 0 ? 'up' : 'dn'}">${chgStr}</span> · range ${rng}`
+      : `<b>${fmtSmDate(p.t, true)}</b><br>Close ${f(p.c)}<br><span class="${chg >= 0 ? 'up' : 'dn'}">${chgStr}</span>`;
+    tip.style.display = 'block';
+    const x = toX(idx);
+    cross.style.left = x + 'px'; cross.style.top = PAD.top + 'px'; cross.style.height = cH + 'px'; cross.style.display = 'block';
+    // Flip the tooltip to the left of the cursor near the right edge
+    const tw = tip.offsetWidth;
+    tip.style.left = (x + 14 + tw > rect.width ? x - 14 - tw : x + 14) + 'px';
+  });
+  canvas.addEventListener('mouseleave', hideSmHover);
+
+  document.getElementById('smToggle').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b || !smState.tk) return;
+    smState.mode = b.dataset.m;
+    try { localStorage.setItem('sm_chart_mode', smState.mode); } catch {}
+    syncSmToggle(); hideSmHover(); drawSentimentChart();
+  });
+  window.addEventListener('resize', () => {
+    if (document.getElementById('smOverlay').classList.contains('visible') && smState.pts.length) drawSentimentChart();
+  });
+}
+
 async function showSentimentHistory(tk) {
   const modal = document.getElementById('smOverlay');
   const titleEl = document.getElementById('smTitle');
   const metaEl  = document.getElementById('smMeta');
+  const req = ++smReq;
+  setupSentimentChartEvents();
+
   titleEl.textContent = tk.label + ' — 3-Month Trend';
   metaEl.textContent  = 'Loading…';
+  smState.tk = tk; smState.pts = [];
+  syncSmToggle(); hideSmHover();
+  const cv = document.getElementById('smCanvas');
+  cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);   // don't leave the previous instrument's chart showing
   modal.classList.add('visible');
 
   try {
-    // Fetch 3-month daily closes from Yahoo Finance via worker
+    // 3 months of daily OHLC from Yahoo Finance via the worker
     const data = await fetchOne(`${YF_BASE}/v8/finance/chart/${tk.sym}?range=3mo&interval=1d`);
+    if (req !== smReq) return;                                 // a newer click superseded this one
     const result = data?.chart?.result?.[0];
     if (!result) throw new Error('no data');
 
-    const timestamps = result.timestamp ?? [];
-    const closes     = result.indicators?.quote?.[0]?.close ?? [];
-    const dates      = timestamps.map(t => new Date(t*1000).toLocaleDateString('en-US',{month:'short',day:'numeric'}));
-
-    // Filter nulls
-    const pts = timestamps.map((t,i) => ({ t, c: closes[i] })).filter(p => p.c != null);
-    if (!pts.length) throw new Error('empty closes');
-
-    const canvas = document.getElementById('smCanvas');
-    const W = canvas.parentElement.clientWidth || 680, H = 200;
-    const dpr = devicePixelRatio || 1;
-    canvas.width = W*dpr; canvas.height = H*dpr;
-    canvas.style.width = W+'px'; canvas.style.height = H+'px';
-    const ctx = canvas.getContext('2d');
-    ctx.scale(dpr, dpr);
-
-    const N = pts.length;
-    const PAD = { top:8, right:10, bottom:22, left:52 };
-    const cW = W - PAD.left - PAD.right;
-    const cH = H - PAD.top  - PAD.bottom;
-    const vals  = pts.map(p => p.c);
-    const minV  = Math.min(...vals), maxV = Math.max(...vals);
-    const range = maxV - minV || 1;
-    const toX   = i => PAD.left + (i/(N-1||1))*cW;
-    const toY   = v => PAD.top  + (1-(v-minV)/range)*cH;
-
-    const up = vals[vals.length-1] >= vals[0];
-    const lineColor = up ? '#00e676' : '#ff4444';
-
-    // Grid lines (5 horizontal)
-    const step = range / 4;
-    for (let s = 0; s <= 4; s++) {
-      const v = minV + s * step;
-      const y = toY(v);
-      ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left+cW, y); ctx.stroke();
-      ctx.fillStyle = 'rgba(180,200,220,0.6)'; ctx.font = '8px monospace'; ctx.textAlign = 'right';
-      ctx.fillText(tk.id === 'tnx' ? v.toFixed(3)+'%' : v >= 1000 ? v.toLocaleString('en-US',{maximumFractionDigits:0}) : v.toFixed(2), PAD.left-4, y+3);
-    }
-
-    // Date labels every ~15 points
-    ctx.fillStyle = 'rgba(180,200,220,0.5)'; ctx.font = '8px monospace'; ctx.textAlign = 'center';
-    pts.forEach((p, i) => {
-      if (i % Math.ceil(N/6) === 0 || i === N-1) {
-        const d = new Date(p.t*1000).toLocaleDateString('en-US',{month:'short',day:'numeric'});
-        ctx.fillText(d, toX(i), H-4);
-      }
+    const ts = result.timestamp ?? [], q = result.indicators?.quote?.[0] ?? {};
+    const pts = [];
+    ts.forEach((t, i) => {
+      const c = q.close?.[i];
+      if (c == null) return;
+      const o = q.open?.[i] ?? c;                              // tolerate bars with missing open/high/low
+      pts.push({ t, o, h: Math.max(q.high?.[i] ?? c, o, c), l: Math.min(q.low?.[i] ?? c, o, c), c });
     });
+    if (!pts.length) throw new Error('empty closes');
+    smState.pts = pts;
+    drawSentimentChart();
 
-    // Gradient fill
-    const grad = ctx.createLinearGradient(0, PAD.top, 0, PAD.top+cH);
-    grad.addColorStop(0, lineColor+'44'); grad.addColorStop(1, lineColor+'00');
-    ctx.beginPath();
-    pts.forEach((p,i) => i===0 ? ctx.moveTo(toX(i),toY(p.c)) : ctx.lineTo(toX(i),toY(p.c)));
-    ctx.lineTo(toX(N-1), toY(minV)); ctx.lineTo(toX(0), toY(minV));
-    ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
-
-    // Price line
-    ctx.beginPath();
-    pts.forEach((p,i) => i===0 ? ctx.moveTo(toX(i),toY(p.c)) : ctx.lineTo(toX(i),toY(p.c)));
-    ctx.strokeStyle = lineColor; ctx.lineWidth = 2; ctx.stroke();
-
-    // End dot
-    const last = pts[N-1];
-    ctx.beginPath(); ctx.arc(toX(N-1), toY(last.c), 3, 0, Math.PI*2);
-    ctx.fillStyle = lineColor; ctx.fill();
-
-    const chg = ((last.c - pts[0].c) / pts[0].c * 100).toFixed(2);
-    metaEl.textContent = `${N} sessions · ${pts[0] ? new Date(pts[0].t*1000).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : ''} → ${new Date(last.t*1000).toLocaleDateString('en-US',{month:'short',day:'numeric'})} · 3M change: ${chg >= 0 ? '+' : ''}${chg}%`;
-
-  } catch(e) {
+    // Footer: trend + the volatility information candles are meant to show
+    const N = pts.length, first = pts[0], last = pts[N - 1], isY = tk.id === 'tnx';
+    const lo = Math.min(...pts.map(p => p.l)), hi = Math.max(...pts.map(p => p.h));
+    const chg = isY ? (last.c - first.c) * 100 : (last.c / first.c - 1) * 100;
+    const avgR = pts.reduce((s, p) => s + (isY ? (p.h - p.l) * 100 : (p.h - p.l) / p.c * 100), 0) / N;
+    metaEl.textContent = `${N} sessions · ${fmtSmDate(first.t)} → ${fmtSmDate(last.t)} · 3M ${chg >= 0 ? '+' : ''}${chg.toFixed(isY ? 1 : 2)}${isY ? ' bp' : '%'}` +
+      ` · range ${fmtSmVal(tk, lo)}–${fmtSmVal(tk, hi)} · avg daily range ${avgR.toFixed(isY ? 1 : 2)}${isY ? ' bp' : '%'}`;
+  } catch (e) {
+    if (req !== smReq) return;
     metaEl.textContent = 'Failed to load: ' + e.message;
     console.warn('[sent chart]', e);
   }
