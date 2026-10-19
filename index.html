@@ -116,6 +116,38 @@
   .btn-analysis.active { border-color:#34d399; color:#34d399; background:rgba(52,211,153,0.07); }
   .btn-analysis.computing { opacity:0.6; pointer-events:none; }
 
+  /* Setup Scanner */
+  .btn-scan:hover { border-color:#67e8f9; color:#67e8f9; }
+  .btn-scan.active { border-color:#67e8f9; color:#67e8f9; background:rgba(103,232,249,0.07); }
+  .btn-badge { margin-left:6px; font-size:9px; line-height:14px; min-width:14px; text-align:center; padding:0 4px; border-radius:8px; background:rgba(103,232,249,0.15); color:#67e8f9; font-weight:700; }
+  .scan-panel { display:none; border-bottom:1px solid var(--border); background:var(--bg2); padding:12px 28px 16px; }
+  .scan-panel.visible { display:block; }
+  .scan-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; flex-wrap:wrap; }
+  .scan-label { font-size:10px; color:#67e8f9; letter-spacing:1.5px; text-transform:uppercase; font-weight:600; }
+  .scan-ts { font-size:9px; color:var(--text3); }
+  .scan-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; align-items:start; }
+  .scan-card { background:var(--bg3); border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+  .scan-card-title { display:flex; justify-content:space-between; align-items:center; padding:7px 12px; font-size:10px; font-weight:600; letter-spacing:0.5px; color:var(--text); background:rgba(255,255,255,0.03); border-bottom:1px solid var(--border); }
+  .scan-count { font-size:9px; color:#67e8f9; border:1px solid rgba(103,232,249,0.4); border-radius:8px; padding:0 7px; }
+  .scan-colhead { display:grid; gap:6px; padding:4px 12px; border-bottom:1px solid var(--border); }
+  .scan-colhead .wcol-label:first-child { text-align:left; }
+  .scan-row { display:grid; gap:6px; align-items:center; padding:5px 12px; border-bottom:1px solid rgba(255,255,255,0.04); cursor:pointer; }
+  .scan-row:hover { background:rgba(255,255,255,0.04); }
+  .scan-pb { grid-template-columns:1.5fr 38px repeat(5,1fr); }
+  .scan-rv { grid-template-columns:1.5fr repeat(5,1fr); }
+  .scan-rows { max-height:720px; overflow-y:auto; }
+  .scan-pb .wcol-label:nth-child(2) { text-align:center; }
+  .scan-symcell { display:flex; flex-wrap:wrap; align-items:baseline; gap:1px 6px; min-width:0; }
+  .scan-sym { font-size:12.5px; font-weight:700; color:var(--text); }
+  .scan-grp { flex-basis:100%; font-size:8px; letter-spacing:0.5px; text-transform:uppercase; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .scan-earn { font-size:8px; color:#fbbf24; border:1px solid rgba(251,191,36,0.45); border-radius:3px; padding:0 4px; white-space:nowrap; }
+  .scan-pill { font-size:9px; font-weight:700; text-align:center; color:#67e8f9; background:rgba(103,232,249,0.12); border-radius:3px; padding:1px 0; }
+  .scan-empty { padding:14px 12px; font-size:10.5px; color:var(--text3); font-style:italic; line-height:1.5; }
+  .scan-rule { padding:8px 12px; font-size:9px; line-height:1.55; color:var(--text3); border-top:1px solid var(--border); }
+  .scan-rule b { color:var(--text2); }
+  .scan-foot { margin-top:8px; font-size:9px; color:var(--text3); }
+  @media (max-width:900px) { .scan-grid { grid-template-columns:1fr; } }
+
   /* Earnings Calendar */
   .btn-earn:hover { border-color:#fbbf24; color:#fbbf24; }
   .btn-earn.active { border-color:#fbbf24; color:#fbbf24; background:rgba(251,191,36,0.07); }
@@ -234,14 +266,14 @@
   .sm-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:100; align-items:center; justify-content:center; }
   .sm-overlay.visible { display:flex; }
   .sm-modal { background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:16px 20px; width:min(720px,92vw); position:relative; }
-  .sm-title { font-size:11px; color:var(--accent); letter-spacing:1.5px; text-transform:uppercase; font-weight:600; margin-bottom:12px; }
+  .sm-title { font-size:11px; color:var(--accent); letter-spacing:1.5px; text-transform:uppercase; font-weight:600; margin-bottom:8px; }
   .sm-canvas-wrap { width:100%; height:200px; position:relative; }
   .sm-meta { font-size:9px; color:var(--text3); margin-top:8px; display:flex; justify-content:space-between; }
   .sm-close { position:absolute; top:12px; right:16px; background:none; border:none; color:var(--text3); font-size:18px; cursor:pointer; line-height:1; }
   .sm-close:hover { color:var(--text); }
   .sm-toggle { position:absolute; top:11px; right:50px; display:flex; gap:4px; }
-  .sm-toggle button { background:var(--bg3); border:1px solid var(--border); color:var(--text3); font-family:inherit; font-size:9px; padding:2px 9px; border-radius:3px; cursor:pointer; letter-spacing:0.5px; }
-  .sm-toggle button:hover { color:var(--text); }
+  .sm-toggle button, .sm-ovl-toggle button { background:var(--bg3); border:1px solid var(--border); color:var(--text3); font-family:inherit; font-size:9px; padding:2px 9px; border-radius:3px; cursor:pointer; letter-spacing:0.5px; }
+  .sm-toggle button:hover, .sm-ovl-toggle button:hover { color:var(--text); }
   .sm-toggle button.active { border-color:var(--accent); color:var(--accent); }
   .sm-canvas-wrap canvas { display:block; cursor:crosshair; }
   .sm-cross { position:absolute; width:1px; background:rgba(255,255,255,0.2); pointer-events:none; display:none; }
@@ -249,6 +281,13 @@
   .sm-tip b { color:var(--text); }
   .sm-tip .up { color:var(--green); } .sm-tip .dn { color:var(--red); }
   .sm-meta span:first-child { flex:1; padding-right:10px; }
+  .sm-ovl-row { display:flex; align-items:center; gap:12px; margin-bottom:6px; min-height:22px; }
+  .sm-ovl-toggle { display:flex; gap:4px; }
+  .sm-ovl-toggle button[data-o="spx"].active { border-color:#38bdf8; color:#38bdf8; }
+  .sm-ovl-toggle button[data-o="ndx"].active { border-color:#c084fc; color:#c084fc; }
+  .sm-ovl-toggle button[data-o="off"].active { border-color:var(--text3); color:var(--text2); }
+  .sm-corr { font-size:9.5px; color:var(--text2); letter-spacing:0.3px; }
+  .sm-corr b { font-weight:600; }
   .sent-top { display:flex; justify-content:space-between; align-items:flex-start; gap:6px; }
   .sent-label { font-size:10px; color:var(--text2); letter-spacing:1.5px; text-transform:uppercase; margin-bottom:3px; white-space:nowrap; font-weight:600; }
   .sent-price { font-size:13px; font-weight:700; color:var(--text); letter-spacing:-0.3px; white-space:nowrap; }
@@ -405,6 +444,10 @@
   ::-webkit-scrollbar-track { background:var(--bg2); }
   ::-webkit-scrollbar-thumb { background:var(--border2); border-radius:2px; }
 
+  @media (max-width:1300px) {   /* toolbar no longer fits on one line: put the buttons on their own wrapping row instead of overflowing sideways */
+    .toolbar { flex-wrap:wrap; gap:6px 12px; }
+    .btn-row { flex-wrap:wrap; }
+  }
   @media (max-width:1100px) { .market-overview { grid-template-columns:1fr 1fr; } .theme-ranking { display:none; } }
   @media (max-width:900px) {
     .content-wrap { flex-direction:column; }
@@ -441,6 +484,7 @@
     <button class="btn btn-movers" id="moversBtn"><span class="btn-icon">🔥</span> Theme Movers</button>
     <button class="btn btn-trump" id="trumpBtn"><span class="btn-icon">🇺🇸</span> Trump Daily</button>
     <button class="btn btn-news" id="newsBtn"><span class="btn-icon">📰</span> News & Filings</button>
+    <button class="btn btn-scan" id="scanBtn"><span class="btn-icon">🔎</span> Scanner<span class="btn-badge" id="scanBadge" style="display:none"></span></button>
     <button class="btn btn-earn" id="earnBtn"><span class="btn-icon">📅</span> Earnings</button>
     <button class="btn btn-options" id="optionsBtn"><span class="btn-icon">🎯</span> Options Flow</button>
     <button class="btn btn-analysis" id="analysisBtn"><span class="btn-icon">🧠</span> Market Analysis</button>
@@ -509,6 +553,12 @@
     <button class="sm-close" onclick="document.getElementById('smOverlay').classList.remove('visible')">✕</button>
     <div class="sm-title" id="smTitle">3-Month Trend</div>
     <div class="sm-toggle" id="smToggle"><button data-m="candle">Candles</button><button data-m="line">Line</button></div>
+    <div class="sm-ovl-row">
+      <div class="sm-ovl-toggle" id="smOvlToggle" title="Overlay a market index (plotted on the right-hand axis)">
+        <button data-o="spx">SPX</button><button data-o="ndx">NASDAQ</button><button data-o="off">Off</button>
+      </div>
+      <span class="sm-corr" id="smCorr"></span>
+    </div>
     <div class="sm-canvas-wrap">
       <canvas id="smCanvas"></canvas>
       <div class="sm-cross" id="smCross"></div>
@@ -516,6 +566,44 @@
     </div>
     <div class="sm-meta"><span id="smMeta"></span><span id="smSource">Source: Yahoo Finance</span></div>
   </div>
+</div>
+
+<!-- Setup Scanner Panel (hidden by default) -->
+<div class="scan-panel" id="scanPanel">
+  <div class="scan-header">
+    <span class="scan-label">🔎 Setup Scanner · Watchlist</span>
+    <span class="scan-ts" id="scanTs"></span>
+  </div>
+  <div class="scan-grid">
+    <div class="scan-card">
+      <div class="scan-card-title"><span>🔄 Pullbacks to the 20/50-day average in an uptrend</span><span class="scan-count" id="scanPbCount">0</span></div>
+      <div class="scan-colhead scan-pb">
+        <div class="wcol-label">Ticker</div>
+        <div class="wcol-label" title="Which moving average price is testing">At</div>
+        <div class="wcol-label" title="Price vs that moving average">vs MA</div>
+        <div class="wcol-label" title="Pullback depth from the 20-session closing high">From high</div>
+        <div class="wcol-label" title="3-month relative strength vs SPX, in percentage points">RS 3M</div>
+        <div class="wcol-label" title="Average volume of the last 5 sessions vs the 20-day average. Below 1x = volume drying up.">5D vol</div>
+        <div class="wcol-label">1D%</div>
+      </div>
+      <div class="scan-rows" id="scanPbRows"></div>
+      <div class="scan-rule"><b>Rules:</b> uptrend = price above the 200-day average, and a rising 50-day average that is above the 200-day. Pullback = 3–15% below the 20-session closing high. Setup = price within −2% to +3% of the 20-day average (while the 20-day is above the 50-day) or of the 50-day average. Sorted by 3-month relative strength. 5D vol in green means volume dried up during the pullback.</div>
+    </div>
+    <div class="scan-card">
+      <div class="scan-card-title"><span>🚀 Positive relative strength + volume spike</span><span class="scan-count" id="scanRvCount">0</span></div>
+      <div class="scan-colhead scan-rv">
+        <div class="wcol-label">Ticker</div>
+        <div class="wcol-label" title="Today's volume vs its 20-day average">Volume</div>
+        <div class="wcol-label">1D%</div>
+        <div class="wcol-label" title="1-month relative strength vs SPX, in percentage points">RS 1M</div>
+        <div class="wcol-label" title="3-month relative strength vs SPX, in percentage points">RS 3M</div>
+        <div class="wcol-label" title="Distance below the 52-week high">52W↓</div>
+      </div>
+      <div class="scan-rows" id="scanRvRows"></div>
+      <div class="scan-rule"><b>Rules:</b> outperforming SPX over both 1 month and 3 months, and today's volume at least 2× its 20-day average. Up-days are listed first (▲), then the biggest volume spike. ▼ means the spike came on a down day.</div>
+    </div>
+  </div>
+  <div class="scan-foot">These are screens to review, not trade signals. They use daily closes; during the session, volume compares a partial day with a full-day average. ⚠ marks stocks reporting earnings within 7 days.</div>
 </div>
 
 <!-- Earnings Calendar Panel (hidden by default) -->
@@ -826,14 +914,18 @@ async function fetchVolumeData(sym) {
   if (!WORKER_URL) await _delay(500);
   const data = await fetchOne(`${YF_BASE}/v8/finance/chart/${sym}?range=3mo&interval=1d`);
   const result = data?.chart?.result?.[0];
-  if (!result) return { todayVol: null, avgVol20: null, spikeRatio: null };
+  if (!result) return { todayVol: null, avgVol20: null, spikeRatio: null, dryRatio: null };
   const volumes = (result.indicators?.quote?.[0]?.volume ?? []).filter(v => v != null && v > 0);
-  if (volumes.length < 2) return { todayVol: null, avgVol20: null, spikeRatio: null };
+  if (volumes.length < 2) return { todayVol: null, avgVol20: null, spikeRatio: null, dryRatio: null };
   const todayVol = volumes[volumes.length - 1];
   const prev20   = volumes.slice(-21, -1); // last 20 trading days excluding today
   const avgVol20 = prev20.length ? prev20.reduce((a,b) => a+b, 0) / prev20.length : null;
   const spikeRatio = (avgVol20 && avgVol20 > 0) ? todayVol / avgVol20 : null;
-  return { todayVol, avgVol20, spikeRatio };
+  // Last 5 completed sessions vs the 20-day average: below 1 means volume is drying up (what you want in a pullback)
+  const last5 = volumes.slice(-6, -1);
+  const avg5  = last5.length === 5 ? last5.reduce((a,b) => a+b, 0) / 5 : null;
+  const dryRatio = (avg5 && avgVol20 > 0) ? avg5 / avgVol20 : null;
+  return { todayVol, avgVol20, spikeRatio, dryRatio };
 }
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
@@ -1922,6 +2014,7 @@ const WATCHLIST = [
 ];
 const wlData = {};
 
+let wlLoading = false;               // true while loadWatchlist is still fetching
 let wlSpx = { r1:null, r3:null };   // S&P 500 1M / 3M % change (benchmark for relative strength)
 
 // % change from n sessions ago to the latest close
@@ -1988,6 +2081,7 @@ function renderWatchlist() {
 
 async function loadWatchlist() {
   const syms = [...new Set(WATCHLIST.flatMap(g=>g.tickers))];
+  wlLoading = true;
   for (const sym of syms) wlData[sym] = { d1:null, d5:null, w52:null, r1m:null, r3m:null, rs1m:null, rs3m:null };
   renderWatchlist();
 
@@ -2022,18 +2116,162 @@ async function loadWatchlist() {
       const r1m = pctBack(hist1y, 21), r3m = pctBack(hist1y, 63);
       const rs1m = (r1m != null && spx.r1 != null) ? r1m - spx.r1 : null;
       const rs3m = (r3m != null && spx.r3 != null) ? r3m - spx.r3 : null;
-      wlData[sym] = { d1, d5, w52, volSpike, volSpikeRatio, r1m, r3m, rs1m, rs3m };
+      wlData[sym] = { d1, d5, w52, volSpike, volSpikeRatio, r1m, r3m, rs1m, rs3m, ma: computeMAs(hist1y), vol5: vol.dryRatio };
     } catch(e) { console.warn('[wl]', sym, e.message); }
     renderWatchlist();
     renderWlTopPerformers();
+    if (scanVisible) renderScanner();
   };
 
-  if (WORKER_URL) {
-    await Promise.all(syms.map(run));
-  } else {
-    for (const sym of syms) await run(sym);
+  try {
+    if (WORKER_URL) {
+      await Promise.all(syms.map(run));
+    } else {
+      for (const sym of syms) await run(sym);
+    }
+  } finally {
+    wlLoading = false;       // a ticker that failed to load must not leave the scanner "loading" forever
+    renderScanner();
   }
 }
+
+// ─── SETUP SCANNER ────────────────────────────────────────────────────────────
+// Built entirely from data the watchlist already loads (1Y closes + 3M volume): no extra requests.
+//   1) Pullbacks to the 20/50-day average inside an uptrend
+//   2) Positive relative strength (vs SPX) together with a volume spike
+const SCAN = {
+  pbMin: 3, pbMax: 15,      // pullback depth: % below the 20-session closing high
+  bandLo: -2, bandHi: 3,    // % distance from a moving average that counts as "at" it
+  spikeMin: 2,              // volume multiple of the 20-day average (same threshold as the ⚡ badge)
+  trendLook: 10,            // sessions back used to confirm the 50-day average is rising
+};
+let scanVisible = false;
+
+function smaAt(c, n, back = 0) {
+  const end = c.length - back;
+  if (end < n) return null;
+  let s = 0;
+  for (let i = end - n; i < end; i++) s += c[i];
+  return s / n;
+}
+
+// Moving averages from the 1Y closes (sma200 is null for stocks that haven't traded 200 sessions)
+function computeMAs(c) {
+  if (!c || c.length < 50) return null;
+  return {
+    last: c[c.length - 1],
+    sma20: smaAt(c, 20), sma50: smaAt(c, 50), sma200: smaAt(c, 200),
+    sma50Prev: smaAt(c, 50, SCAN.trendLook),
+    high20: Math.max(...c.slice(-20)),
+  };
+}
+
+function pullbackSetup(d) {
+  const m = d?.ma;
+  if (!m || m.sma200 == null || m.sma50Prev == null) return null;
+  const { last, sma20, sma50, sma200, sma50Prev, high20 } = m;
+  // Uptrend: price above the 200-day, and a rising 50-day that sits above the 200-day
+  if (!(last > sma200 && sma50 > sma200 && sma50 > sma50Prev)) return null;
+  // A real but orderly pullback from the recent high (too shallow = no pullback, too deep = trend damage)
+  const depth = (1 - last / high20) * 100;
+  if (depth < SCAN.pbMin || depth > SCAN.pbMax) return null;
+  // Sitting at the 20-day (only while it is still above the 50-day) or at the 50-day; nearest wins
+  const d20 = (last / sma20 - 1) * 100, d50 = (last / sma50 - 1) * 100;
+  const cands = [];
+  if (d20 >= SCAN.bandLo && d20 <= SCAN.bandHi && sma20 >= sma50) cands.push({ ma: 20, dist: d20 });
+  if (d50 >= SCAN.bandLo && d50 <= SCAN.bandHi) cands.push({ ma: 50, dist: d50 });
+  if (!cands.length) return null;
+  cands.sort((a, b) => Math.abs(a.dist) - Math.abs(b.dist));
+  return { ma: cands[0].ma, dist: cands[0].dist, depth };
+}
+
+function rsVolSetup(d) {
+  if (!d || d.rs1m == null || d.rs3m == null || d.volSpikeRatio == null) return null;
+  if (!(d.rs1m > 0 && d.rs3m > 0 && d.volSpikeRatio >= SCAN.spikeMin)) return null;
+  return { dir: (d.d1 ?? 0) >= 0 ? 'up' : 'down' };
+}
+
+function runScanner() {
+  const syms = [...new Set(WATCHLIST.flatMap(g => g.tickers))];
+  const group = {};
+  WATCHLIST.forEach(g => g.tickers.forEach(s => { if (!group[s]) group[s] = g; }));
+  const pullbacks = [], rsvol = [];
+  let loaded = 0, skipped = 0;
+  for (const sym of syms) {
+    const d = wlData[sym];
+    if (!d || (!d.ma && d.d1 == null)) continue;            // not loaded yet, or the fetch failed
+    loaded++;
+    if (!d.ma || d.ma.sma200 == null) skipped++;
+    const pb = pullbackSetup(d);
+    if (pb) pullbacks.push({ sym, g: group[sym], d, ...pb });
+    const rv = rsVolSetup(d);
+    if (rv) rsvol.push({ sym, g: group[sym], d, ...rv });
+  }
+  // Pullbacks: relative-strength leaders first. Volume spikes: up-days first, then the biggest spike.
+  pullbacks.sort((a, b) => (b.d.rs3m ?? -1e9) - (a.d.rs3m ?? -1e9));
+  rsvol.sort((a, b) => ((b.dir === 'up') - (a.dir === 'up')) || (b.d.volSpikeRatio - a.d.volSpikeRatio));
+  return { pullbacks, rsvol, loaded, total: syms.length, skipped };
+}
+
+function scanSymCell(r) {
+  const ev = earnBySym[r.sym];
+  const earn = ev ? `<span class="scan-earn" title="Earnings ${earnEsc(ev.label)}">⚠ ${earnEsc(fmtEarnDay(ev.date))}</span>` : '';
+  return `<div class="scan-symcell"><span class="scan-sym">${r.sym}</span>${earn}<span class="scan-grp" style="color:${r.g?.color ?? 'var(--text3)'}">${r.g?.group ?? ''}</span></div>`;
+}
+
+function renderScanner() {
+  const r = runScanner();
+  const badge = document.getElementById('scanBadge');
+  if (badge) {
+    const n = r.pullbacks.length + r.rsvol.length;
+    badge.textContent = n;
+    badge.style.display = r.loaded ? 'inline-block' : 'none';
+  }
+  if (!scanVisible) return;
+
+  const sg = v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
+  document.getElementById('scanPbCount').textContent = r.pullbacks.length;
+  document.getElementById('scanRvCount').textContent = r.rsvol.length;
+
+  document.getElementById('scanPbRows').innerHTML = r.pullbacks.length ? r.pullbacks.map(x => {
+    const m = x.d.ma;
+    const tip = `${x.sym}: price ${m.last.toFixed(2)} · 20d ${m.sma20.toFixed(2)} · 50d ${m.sma50.toFixed(2)} · 200d ${m.sma200.toFixed(2)}`;
+    const vc = x.d.vol5 == null ? '' : x.d.vol5 < 0.85 ? 'pos' : x.d.vol5 > 1.15 ? 'neg' : 'flat';
+    return `<div class="scan-row scan-pb" title="${tip}" onclick="window.open('${tvUrl(x.sym)}','_blank')">
+      ${scanSymCell(x)}
+      <span class="scan-pill">${x.ma}d</span>
+      <span class="w-val flat">${sg(x.dist)}</span>
+      <span class="w-val neg">${sg(-x.depth)}</span>
+      <span class="w-val ${wlClass(x.d.rs3m)}">${x.d.rs3m == null ? '—' : rsFmt(x.d.rs3m)}</span>
+      <span class="w-val ${vc}">${x.d.vol5 == null ? '—' : x.d.vol5.toFixed(2) + '×'}</span>
+      <span class="w-val ${wlClass(x.d.d1)}">${wlFmt(x.d.d1)}</span>
+    </div>`;
+  }).join('') : `<div class="scan-empty">No pullback setups right now. The rules are strict by design, and strong markets often leave few stocks pulling back.</div>`;
+
+  document.getElementById('scanRvRows').innerHTML = r.rsvol.length ? r.rsvol.map(x => {
+    const tip = `${x.sym}: volume ${x.d.volSpikeRatio.toFixed(1)}× its 20-day average · RS 1M ${rsFmt(x.d.rs1m)} · RS 3M ${rsFmt(x.d.rs3m)} vs SPX`;
+    return `<div class="scan-row scan-rv" title="${tip}" onclick="window.open('${tvUrl(x.sym)}','_blank')">
+      ${scanSymCell(x)}
+      <span class="w-val" style="color:#ff9800">⚡${x.d.volSpikeRatio.toFixed(1)}×</span>
+      <span class="w-val ${wlClass(x.d.d1)}">${x.dir === 'up' ? '▲' : '▼'} ${wlFmt(x.d.d1)}</span>
+      <span class="w-val ${wlClass(x.d.rs1m)}">${rsFmt(x.d.rs1m)}</span>
+      <span class="w-val ${wlClass(x.d.rs3m)}">${rsFmt(x.d.rs3m)}</span>
+      <span class="w-val ${wlClass(x.d.w52 != null ? -x.d.w52 : null)}">${x.d.w52 != null ? '-' + x.d.w52.toFixed(1) + '%' : '—'}</span>
+    </div>`;
+  }).join('') : `<div class="scan-empty">No watchlist stock currently combines positive relative strength with a volume spike.</div>`;
+
+  const failed = r.total - r.loaded;
+  document.getElementById('scanTs').textContent =
+    `${r.loaded}/${r.total} stocks scanned` + (wlLoading ? ' · still loading…' : failed > 0 ? ` · ${failed} failed to load` : '') +
+    (r.skipped ? ` · ${r.skipped} lack 200 sessions of history (skipped by the pullback scan)` : '');
+}
+
+document.getElementById('scanBtn').addEventListener('click', () => {
+  scanVisible = !scanVisible;
+  document.getElementById('scanPanel').classList.toggle('visible', scanVisible);
+  document.getElementById('scanBtn').classList.toggle('active', scanVisible);
+  if (scanVisible) renderScanner();
+});
 
 // ─── EARNINGS CALENDAR ────────────────────────────────────────────────────────
 // Source: Nasdaq public earnings calendar, fetched through the Cloudflare Worker.
@@ -2192,6 +2430,7 @@ function afterEarnLoad() {
   rebuildEarnIndex();
   renderWatchlist();          // refresh row markers
   renderEarningsPanel();
+  renderScanner();            // refresh the ⚠ earnings tags
 }
 
 async function loadEarningsCalendar(force = false) {
@@ -3093,11 +3332,111 @@ const SENTIMENT_TICKERS = [
 // Sentiment cells that support 3-month chart (Gold, Silver, Oil, 10Y Yield)
 const SENT_CHART_IDS = new Set(['gold','silver','oil','tnx','btc','eth','dxy']);
 
-// ─── SENTIMENT 3-MONTH CHART (candles / line) ─────────────────────────────────
-let smState = { tk: null, pts: [], mode: 'candle' };   // pts: [{t,o,h,l,c}] daily bars
-try { if (localStorage.getItem('sm_chart_mode') === 'line') smState.mode = 'line'; } catch {}
+// ─── SENTIMENT 3-MONTH CHART (candles / line + market-index overlay) ──────────
+let smState = { tk: null, pts: [], mode: 'candle', ovl: 'spx', ovlSeries: null };   // pts: [{t,o,h,l,c}] daily bars
+try {
+  if (localStorage.getItem('sm_chart_mode') === 'line') smState.mode = 'line';
+  const o = localStorage.getItem('sm_overlay');
+  if (o === 'spx' || o === 'ndx' || o === 'off') smState.ovl = o;
+} catch {}
 let smLayout = null;   // geometry of the last draw, used by the hover readout
 let smReq = 0;         // guards against a slow earlier response overwriting a newer click
+
+// Market-index overlay, drawn against its own right-hand axis. Same symbols as the S&P 500 / NASDAQ panels.
+const SM_INDEX = {
+  spx: { sym: '%5EGSPC', label: 'SPX',    color: '#38bdf8' },
+  ndx: { sym: '%5EIXIC', label: 'NASDAQ', color: '#c084fc' },
+};
+const SM_IDX_TTL = 10 * 60 * 1000;
+const smIdxCache = {};                                   // key -> { at, p: Promise<[{d,c}]> }
+const smDateKey = t => new Date(t * 1000).toISOString().slice(0, 10);   // UTC trading date (matches the axis labels)
+
+function loadSmIndex(key) {
+  const hit = smIdxCache[key];
+  if (hit && Date.now() - hit.at < SM_IDX_TTL) return hit.p;
+  const p = fetchOne(`${YF_BASE}/v8/finance/chart/${SM_INDEX[key].sym}?range=3mo&interval=1d`).then(data => {
+    const r = data?.chart?.result?.[0];
+    if (!r) throw new Error('no data');
+    const ts = r.timestamp ?? [], cl = r.indicators?.quote?.[0]?.close ?? [];
+    const bars = [];
+    ts.forEach((t, i) => { if (cl[i] != null) bars.push({ d: smDateKey(t), c: cl[i] }); });
+    if (bars.length < 5) throw new Error('too few bars');
+    return bars;
+  });
+  smIdxCache[key] = { at: Date.now(), p };
+  p.catch(() => { if (smIdxCache[key]?.p === p) delete smIdxCache[key]; });   // never cache a failure
+  return p;
+}
+
+// One overlay value per indicator bar. When the market was closed that day (weekends/holidays for 24/7 assets
+// like Bitcoin) the last known close is carried forward and flagged.
+function smAlignOverlay(pts, bars) {
+  const out = []; let j = -1;
+  for (const p of pts) {
+    const d = smDateKey(p.t);
+    while (j + 1 < bars.length && bars[j + 1].d <= d) j++;
+    out.push(j < 0 ? null : { v: bars[j].c, carried: bars[j].d !== d, chg: j > 0 ? bars[j].c / bars[j - 1].c - 1 : null });
+  }
+  return out;
+}
+
+function smPearson(a, b) {
+  const n = a.length;
+  if (n < 3) return null;
+  let sa = 0, sb = 0;
+  for (let i = 0; i < n; i++) { sa += a[i]; sb += b[i]; }
+  const ma = sa / n, mb = sb / n;
+  let num = 0, da = 0, db = 0;
+  for (let i = 0; i < n; i++) { const x = a[i] - ma, y = b[i] - mb; num += x * y; da += x * x; db += y * y; }
+  return (da > 0 && db > 0) ? num / Math.sqrt(da * db) : null;
+}
+
+// Correlation of daily moves, using only dates where both traded (so a Monday move spans the same Fri→Mon gap in both).
+// Yields are compared as absolute changes (the market convention); everything else as % returns.
+function smCorrelation(tk, pts, bars) {
+  const im = new Map(bars.map(b => [b.d, b.c]));
+  const seen = new Set(), common = [];
+  pts.forEach(p => { const d = smDateKey(p.t); if (seen.has(d) || !im.has(d)) return; seen.add(d); common.push({ a: p.c, b: im.get(d) }); });
+  if (common.length < 16) return null;
+  const ra = [], rb = [];
+  for (let i = 1; i < common.length; i++) {
+    ra.push(tk.id === 'tnx' ? common[i].a - common[i - 1].a : common[i].a / common[i - 1].a - 1);
+    rb.push(common[i].b / common[i - 1].b - 1);
+  }
+  const r = smPearson(ra, rb);
+  return r == null ? null : { r, n: ra.length };
+}
+
+function applySmOverlay(key, bars, err) {
+  const corrEl = document.getElementById('smCorr');
+  smState.ovlSeries = null;
+  corrEl.textContent = ''; corrEl.title = '';
+  if (key === 'off') return;
+  const cfg = SM_INDEX[key];
+  if (!bars) { corrEl.textContent = `${cfg.label} overlay unavailable${err ? ' (' + err + ')' : ''}`; return; }
+  smState.ovlSeries = smAlignOverlay(smState.pts, bars);
+  const c = smCorrelation(smState.tk, smState.pts, bars);
+  if (!c) { corrEl.textContent = `Corr vs ${cfg.label}: n/a`; return; }
+  const a = Math.abs(c.r);
+  const word = a < 0.2 ? 'negligible' : a < 0.4 ? 'weak' : a < 0.6 ? 'moderate' : a < 0.8 ? 'strong' : 'very strong';
+  corrEl.innerHTML = `Corr vs ${cfg.label}: <b style="color:${cfg.color}">${c.r >= 0 ? '+' : ''}${c.r.toFixed(2)}</b> (${word}${c.r <= -0.2 ? ', inverse' : ''})`;
+  corrEl.title = `Pearson correlation of daily ${smState.tk.id === 'tnx' ? 'yield changes' : 'returns'} vs ${cfg.label} over ${c.n} sessions (3 months)`;
+}
+
+async function setSmOverlay(key) {
+  smState.ovl = key;
+  try { localStorage.setItem('sm_overlay', key); } catch {}
+  syncSmOvlToggle();
+  if (!smState.pts.length) return;                      // still loading: showSentimentHistory will pick up the new choice
+  const myReq = smReq;
+  if (key === 'off') { applySmOverlay('off'); hideSmHover(); drawSentimentChart(); return; }
+  document.getElementById('smCorr').textContent = `Loading ${SM_INDEX[key].label}…`;
+  let bars = null, err = '';
+  try { bars = await loadSmIndex(key); } catch (e) { err = e.message; }
+  if (myReq !== smReq || smState.ovl !== key) return;   // superseded by a newer click
+  applySmOverlay(key, bars, err);
+  hideSmHover(); drawSentimentChart();
+}
 
 function fmtSmVal(tk, v) {
   if (tk.id === 'tnx') return v.toFixed(3) + '%';
@@ -3110,12 +3449,18 @@ const fmtSmDate = (t, long) => new Date(t * 1000).toLocaleDateString('en-US',
 function syncSmToggle() {
   document.querySelectorAll('#smToggle button').forEach(b => b.classList.toggle('active', b.dataset.m === smState.mode));
 }
+function syncSmOvlToggle() {
+  document.querySelectorAll('#smOvlToggle button').forEach(b => b.classList.toggle('active', b.dataset.o === smState.ovl));
+}
 
 function drawSentimentChart() {
   const { tk, pts, mode } = smState;
   const canvas = document.getElementById('smCanvas');
   if (!canvas || !pts.length) return;
   const candle = mode === 'candle';
+  const cfg = smState.ovlSeries ? SM_INDEX[smState.ovl] : null;
+  const ovlVals = cfg ? smState.ovlSeries.filter(Boolean).map(o => o.v) : [];
+  const hasOvl = !!cfg && ovlVals.length >= 2;
   const W = canvas.parentElement.clientWidth || 680, H = 200;
   const dpr = devicePixelRatio || 1;
   canvas.width = W * dpr; canvas.height = H * dpr;
@@ -3124,7 +3469,7 @@ function drawSentimentChart() {
   ctx.scale(dpr, dpr);
 
   const N = pts.length;
-  const PAD = { top: 8, right: 10, bottom: 22, left: 52 };
+  const PAD = { top: 8, right: hasOvl ? 54 : 10, bottom: 22, left: 52 };   // room for the right-hand axis labels
   const cW = W - PAD.left - PAD.right, cH = H - PAD.top - PAD.bottom;
   // Candles need the full high/low envelope (plus a little headroom); the line only needs closes
   const lo = candle ? Math.min(...pts.map(p => p.l)) : Math.min(...pts.map(p => p.c));
@@ -3134,23 +3479,35 @@ function drawSentimentChart() {
   const step = cW / N;
   const toX = i => candle ? PAD.left + (i + 0.5) * step : PAD.left + (i / (N - 1 || 1)) * cW;
   const toY = v => PAD.top + (1 - (v - minV) / range) * cH;
-  smLayout = { PAD, cW, cH, N, step, candle, toX, toY };
 
-  // Horizontal grid + price labels
+  // The overlay has its own scale so both series use the full height (that is what makes co-movement visible)
+  let oY = null, oMin = 0, oRange = 1;
+  if (hasOvl) {
+    const l2 = Math.min(...ovlVals), h2 = Math.max(...ovlVals), p2 = (h2 - l2) * 0.06 || h2 * 0.01;
+    oMin = l2 - p2; oRange = (h2 + p2) - oMin;
+    oY = v => PAD.top + (1 - (v - oMin) / oRange) * cH;
+  }
+  smLayout = { PAD, cW, cH, N, step, candle, toX, toY, hasOvl, oY };
+
+  // Horizontal grid + left (indicator) and right (index) price labels
   for (let s = 0; s <= 4; s++) {
     const v = minV + s * range / 4, y = toY(v);
     ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + cW, y); ctx.stroke();
     ctx.fillStyle = 'rgba(180,200,220,0.6)'; ctx.font = '8px monospace'; ctx.textAlign = 'right';
     ctx.fillText(fmtSmVal(tk, v), PAD.left - 4, y + 3);
+    if (hasOvl) {
+      ctx.fillStyle = cfg.color + 'cc'; ctx.textAlign = 'left';
+      ctx.fillText(Math.round(oMin + s * oRange / 4).toLocaleString('en-US'), PAD.left + cW + 5, y + 3);
+    }
   }
 
-  // Date labels (the final label is skipped if it would crowd the previous one)
+  // Date labels (the final label is right-aligned near the edge, and skipped if it would crowd the previous one)
   const every = Math.ceil(N / 6);
   ctx.fillStyle = 'rgba(180,200,220,0.5)'; ctx.font = '8px monospace';
   pts.forEach((p, i) => {
     if (i % every === 0 || (i === N - 1 && (N - 1) % every >= every * 0.6)) {
-      const x = toX(i), nearRight = x > W - 22;               // right-align the last label so it isn't clipped
+      const x = toX(i), nearRight = x > W - 22;
       ctx.textAlign = nearRight ? 'right' : 'center';
       ctx.fillText(fmtSmDate(p.t), nearRight ? W - 2 : x, H - 4);
     }
@@ -3185,6 +3542,20 @@ function drawSentimentChart() {
     ctx.beginPath(); ctx.arc(toX(N - 1), toY(last.c), 3, 0, Math.PI * 2);
     ctx.fillStyle = lineColor; ctx.fill();
   }
+
+  // Index overlay on top (thin line, own right-hand axis)
+  if (hasOvl) {
+    ctx.beginPath();
+    let started = false, lx = 0, ly = 0;
+    smState.ovlSeries.forEach((o, i) => {
+      if (!o) return;
+      const x = toX(i), y = oY(o.v);
+      if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+      lx = x; ly = y;
+    });
+    ctx.strokeStyle = cfg.color; ctx.lineWidth = 1.6; ctx.lineJoin = 'round'; ctx.globalAlpha = 0.9; ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.beginPath(); ctx.arc(lx, ly, 2.5, 0, Math.PI * 2); ctx.fillStyle = cfg.color; ctx.fill();
+  }
 }
 
 function hideSmHover() {
@@ -3203,7 +3574,7 @@ function setupSentimentChartEvents() {
     if (!smLayout || !smState.pts.length) return;
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
-    const { PAD, cW, cH, N, step, candle, toX } = smLayout;
+    const { PAD, cW, cH, N, step, candle, toX, hasOvl } = smLayout;
     const idx = candle ? Math.floor((mx - PAD.left) / step) : Math.round((mx - PAD.left) / cW * (N - 1));
     if (mx < PAD.left || mx > PAD.left + cW || idx < 0 || idx >= N) { hideSmHover(); return; }
 
@@ -3214,9 +3585,18 @@ function setupSentimentChartEvents() {
     const chgStr = (chg >= 0 ? '+' : '') + chg.toFixed(isY ? 1 : 2) + (isY ? ' bp' : '%');
     const rng = isY ? ((p.h - p.l) * 100).toFixed(1) + ' bp' : ((p.h - p.l) / p.c * 100).toFixed(2) + '%';
     const f = v => fmtSmVal(tk, v);
-    tip.innerHTML = candle
+
+    let ovlLine = '';
+    const o = hasOvl ? smState.ovlSeries?.[idx] : null;
+    if (o) {
+      const cfg = SM_INDEX[smState.ovl];
+      ovlLine = `<br><span style="color:${cfg.color}">${cfg.label} ${Math.round(o.v).toLocaleString('en-US')}</span>` +
+        (o.carried ? ' <span style="color:var(--text3)">(market closed)</span>'
+          : o.chg != null ? ` <span class="${o.chg >= 0 ? 'up' : 'dn'}">${o.chg >= 0 ? '+' : ''}${(o.chg * 100).toFixed(2)}%</span>` : '');
+    }
+    tip.innerHTML = (candle
       ? `<b>${fmtSmDate(p.t, true)}</b><br>O ${f(p.o)} &nbsp; H ${f(p.h)}<br>L ${f(p.l)} &nbsp; C ${f(p.c)}<br><span class="${chg >= 0 ? 'up' : 'dn'}">${chgStr}</span> · range ${rng}`
-      : `<b>${fmtSmDate(p.t, true)}</b><br>Close ${f(p.c)}<br><span class="${chg >= 0 ? 'up' : 'dn'}">${chgStr}</span>`;
+      : `<b>${fmtSmDate(p.t, true)}</b><br>Close ${f(p.c)}<br><span class="${chg >= 0 ? 'up' : 'dn'}">${chgStr}</span>`) + ovlLine;
     tip.style.display = 'block';
     const x = toX(idx);
     cross.style.left = x + 'px'; cross.style.top = PAD.top + 'px'; cross.style.height = cH + 'px'; cross.style.display = 'block';
@@ -3233,6 +3613,11 @@ function setupSentimentChartEvents() {
     try { localStorage.setItem('sm_chart_mode', smState.mode); } catch {}
     syncSmToggle(); hideSmHover(); drawSentimentChart();
   });
+  document.getElementById('smOvlToggle').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b || !smState.tk) return;
+    setSmOverlay(b.dataset.o);
+  });
   window.addEventListener('resize', () => {
     if (document.getElementById('smOverlay').classList.contains('visible') && smState.pts.length) drawSentimentChart();
   });
@@ -3247,15 +3632,19 @@ async function showSentimentHistory(tk) {
 
   titleEl.textContent = tk.label + ' — 3-Month Trend';
   metaEl.textContent  = 'Loading…';
-  smState.tk = tk; smState.pts = [];
-  syncSmToggle(); hideSmHover();
+  smState.tk = tk; smState.pts = []; smState.ovlSeries = null;
+  const corrEl = document.getElementById('smCorr'); corrEl.textContent = ''; corrEl.title = '';
+  syncSmToggle(); syncSmOvlToggle(); hideSmHover();
   const cv = document.getElementById('smCanvas');
   cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);   // don't leave the previous instrument's chart showing
   modal.classList.add('visible');
 
   try {
-    // 3 months of daily OHLC from Yahoo Finance via the worker
-    const data = await fetchOne(`${YF_BASE}/v8/finance/chart/${tk.sym}?range=3mo&interval=1d`);
+    // Indicator OHLC and the selected index load in parallel; a failed overlay never blocks the main chart
+    const usedKey = smState.ovl;
+    let ovlErr = '';
+    const ovlP = usedKey === 'off' ? Promise.resolve(null) : loadSmIndex(usedKey).catch(e => { ovlErr = e.message; return null; });
+    const [data, usedBars] = await Promise.all([fetchOne(`${YF_BASE}/v8/finance/chart/${tk.sym}?range=3mo&interval=1d`), ovlP]);
     if (req !== smReq) return;                                 // a newer click superseded this one
     const result = data?.chart?.result?.[0];
     if (!result) throw new Error('no data');
@@ -3270,6 +3659,8 @@ async function showSentimentHistory(tk) {
     });
     if (!pts.length) throw new Error('empty closes');
     smState.pts = pts;
+    const switched = smState.ovl !== usedKey;                  // user changed the overlay while this was loading
+    if (!switched) applySmOverlay(usedKey, usedBars, ovlErr);
     drawSentimentChart();
 
     // Footer: trend + the volatility information candles are meant to show
@@ -3279,6 +3670,7 @@ async function showSentimentHistory(tk) {
     const avgR = pts.reduce((s, p) => s + (isY ? (p.h - p.l) * 100 : (p.h - p.l) / p.c * 100), 0) / N;
     metaEl.textContent = `${N} sessions · ${fmtSmDate(first.t)} → ${fmtSmDate(last.t)} · 3M ${chg >= 0 ? '+' : ''}${chg.toFixed(isY ? 1 : 2)}${isY ? ' bp' : '%'}` +
       ` · range ${fmtSmVal(tk, lo)}–${fmtSmVal(tk, hi)} · avg daily range ${avgR.toFixed(isY ? 1 : 2)}${isY ? ' bp' : '%'}`;
+    if (switched) setSmOverlay(smState.ovl);                   // loads + applies the overlay the user switched to
   } catch (e) {
     if (req !== smReq) return;
     metaEl.textContent = 'Failed to load: ' + e.message;
