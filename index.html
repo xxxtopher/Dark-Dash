@@ -116,6 +116,51 @@
   .btn-analysis.active { border-color:#34d399; color:#34d399; background:rgba(52,211,153,0.07); }
   .btn-analysis.computing { opacity:0.6; pointer-events:none; }
 
+  /* Theme scorecard */
+  .theme-area { flex:1; min-width:0; display:flex; align-items:flex-start; }
+  .sc-card { width:360px; flex-shrink:0; position:sticky; top:48px; max-height:calc(100vh - 48px); overflow-y:auto; background:var(--bg2); border-left:1px solid var(--border); }
+  .sc-head { display:flex; align-items:baseline; gap:8px; padding:10px 12px 8px; cursor:pointer; user-select:none; }
+  .sc-title { font-size:11px; color:var(--text3); letter-spacing:1.5px; text-transform:uppercase; }
+  .sc-sub { font-size:9px; color:var(--text3); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sc-toggle { font-size:14px; color:var(--text3); line-height:1; }
+  .sc-card.collapsed .sc-body { display:none; }
+  .sc-summary { padding:0 12px 8px; font-size:10px; line-height:1.6; color:var(--text2); }
+  .sc-summary b { color:var(--text); }
+  .sc-cols, .sc-row { display:grid; grid-template-columns:1fr 42px 42px 64px; gap:6px; align-items:center; padding:5px 12px; }
+  .sc-cols { border-top:1px solid var(--border); border-bottom:1px solid var(--border); padding-top:4px; padding-bottom:4px; }
+  .sc-colh { font-size:9px; color:var(--text3); letter-spacing:0.8px; text-transform:uppercase; text-align:right; user-select:none; }
+  .sc-colh:first-child { text-align:left; }
+  .sc-colh[data-sort] { cursor:pointer; }
+  .sc-colh[data-sort]:hover { color:var(--text); }
+  .sc-colh.active { color:var(--accent); }
+  .sc-colh.active::after { content:' ▼'; font-size:7px; }
+  .sc-row { border-bottom:1px solid rgba(255,255,255,0.04); }
+  .sc-row:hover { background:rgba(255,255,255,0.03); }
+  .sc-row.dim .sc-gname, .sc-row.dim .w-val, .sc-row.dim .sc-pctcell { opacity:0.55; }
+  .sc-name { display:flex; flex-wrap:wrap; align-items:baseline; gap:1px 6px; min-width:0; }
+  .sc-top { display:flex; align-items:center; gap:6px; min-width:0; max-width:100%; }
+  .sc-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .sc-gname { font-size:11px; font-weight:600; letter-spacing:0.4px; text-transform:uppercase; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sc-n { font-size:8.5px; color:var(--text3); flex-shrink:0; }
+  .sc-tag { flex-basis:100%; padding-left:13px; font-size:8px; letter-spacing:0.8px; text-transform:uppercase; font-weight:700; }
+  .sc-tag.leading { color:var(--green); } .sc-tag.weakening { color:var(--gold); } .sc-tag.improving { color:#38bdf8; } .sc-tag.lagging { color:var(--red); } .sc-tag.none { color:var(--text3); font-weight:400; }
+  .sc-pctcell { display:flex; flex-direction:column; align-items:flex-end; gap:3px; }
+  .sc-pct { font-size:12px; font-weight:600; }
+  .sc-pct.hi, .sc-bar i.hi { color:var(--green); background:var(--green); } .sc-pct.mid, .sc-bar i.mid { color:var(--gold); background:var(--gold); } .sc-pct.lo, .sc-bar i.lo { color:var(--red); background:var(--red); }
+  .sc-pct { background:none !important; }
+  .sc-bar { width:100%; height:3px; background:rgba(255,255,255,0.07); border-radius:2px; overflow:hidden; }
+  .sc-bar i { display:block; height:100%; }
+  .sc-note { padding:8px 12px 12px; font-size:8.5px; line-height:1.6; color:var(--text3); border-top:1px solid var(--border); }
+  .sc-note b { color:var(--text2); }
+  @media (max-width:1499px) {      /* not enough room beside the bars: stack the scorecard above them */
+    .theme-area { flex-direction:column; }
+    .sc-card { order:-1; width:100%; position:static; max-height:none; border-left:none; border-bottom:1px solid var(--border); }
+    .main-content { width:100%; }
+    .sc-cols, .sc-row { grid-template-columns:1fr 80px 80px 140px; }
+    .sc-name { flex-wrap:nowrap; align-items:center; gap:0 10px; }
+    .sc-tag { flex-basis:auto; padding-left:0; }
+  }
+
   /* Watchlist manager */
   .wl-edit-btn { margin-left:8px; background:var(--bg3); border:1px solid var(--border); color:var(--text3); font-family:inherit; font-size:9px; padding:1px 8px; border-radius:3px; cursor:pointer; letter-spacing:0.5px; text-transform:none; }
   .wl-edit-btn:hover { color:var(--accent); border-color:var(--accent); }
@@ -837,7 +882,25 @@
   </div>
 
   <!-- Bar chart -->
-  <div class="main-content" id="themeBarChart"></div>
+  <div class="theme-area">
+    <div class="main-content" id="themeBarChart"></div>
+    <aside class="sc-card" id="scCard">
+      <div class="sc-head" id="scHead" title="Click to collapse / expand">
+        <span class="sc-title">▸ Theme Scorecard</span><span class="sc-sub" id="scSub"></span><span class="sc-toggle" id="scToggle">−</span>
+      </div>
+      <div class="sc-body">
+        <div class="sc-summary" id="scSummary"></div>
+        <div class="sc-cols" id="scCols">
+          <span class="sc-colh" title="Watchlist group">Group</span>
+          <span class="sc-colh" data-sort="rs1m" title="Average 1-month relative strength vs SPX (percentage points). Click to sort.">RS 1M</span>
+          <span class="sc-colh" data-sort="rs3m" title="Average 3-month relative strength vs SPX (percentage points). Click to sort.">RS 3M</span>
+          <span class="sc-colh" data-sort="ab50" title="Share of the group's stocks trading above their 50-day average. Click to sort.">&gt;50D</span>
+        </div>
+        <div id="scRows"></div>
+        <div class="sc-note"><b>RS</b> = a stock's % change minus SPX's over the same window, averaged across the group (medians are in each row's tooltip). <b>&gt;50D</b> = share of stocks above their 50-day average. <b>Leading</b>: RS 1M and 3M both positive · <b>Weakening</b>: 3M positive, 1M not · <b>Improving</b>: 1M positive, 3M not · <b>Lagging</b>: both negative. Groups with fewer than 3 stocks aren't classified.</div>
+      </div>
+    </aside>
+  </div>
 
 </div>
 
@@ -2255,6 +2318,7 @@ async function loadWlSymbol(sym, retrySpx = false) {
   renderWatchlist();
   renderWlTopPerformers();
   if (scanVisible) renderScanner();
+  scheduleScorecard();
 }
 
 async function loadWatchlist() {
@@ -2262,6 +2326,7 @@ async function loadWatchlist() {
   wlLoading = true;
   for (const sym of syms) wlData[sym] = emptyWlRow();
   renderWatchlist();
+  renderScorecard();       // "loading 0/N…" straight away instead of an empty-looking table
   getWlSpx('force');
   try {
     if (WORKER_URL) {
@@ -2272,8 +2337,104 @@ async function loadWatchlist() {
   } finally {
     wlLoading = false;       // a ticker that failed to load must not leave the scanner "loading" forever
     renderScanner();
+    renderScorecard();
   }
 }
+
+// ─── THEME SCORECARD ──────────────────────────────────────────────────────────
+// Per watchlist group: average relative strength vs SPX, and the share of stocks above their 50-day average.
+// Built from data the watchlist already loads. It answers "which theme is actually leading", as opposed to
+// which theme ETF happened to move most today.
+const SC_MIN_N = 3;          // groups with fewer stocks than this are shown, but not classified
+let scSort = 'rs3m';
+let scTimer = null;
+
+const scMean   = a => a.length ? a.reduce((s, v) => s + v, 0) / a.length : null;
+const scMedian = a => { if (!a.length) return null; const b = [...a].sort((x, y) => x - y), m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; };
+
+// Relative-rotation style quadrant: 3M relative strength = trend, 1M = momentum
+function scClassify(rs1, rs3) {
+  if (rs1 == null || rs3 == null) return null;
+  if (rs3 > 0) return rs1 > 0 ? 'Leading' : 'Weakening';
+  return rs1 > 0 ? 'Improving' : 'Lagging';
+}
+
+function computeScorecard() {
+  return WATCHLIST.map(g => {
+    const syms = [...new Set(g.tickers)];
+    const rows = syms.map(s => wlData[s]).filter(d => d && (d.ma || d.d1 != null));        // loaded stocks only
+    const rs1 = rows.map(d => d.rs1m).filter(v => v != null);
+    const rs3 = rows.map(d => d.rs3m).filter(v => v != null);
+    const withMa = rows.filter(d => d.ma && d.ma.sma50 != null);                          // needs 50 sessions of history
+    const above = withMa.filter(d => d.ma.last > d.ma.sma50).length;
+    const avg1 = scMean(rs1), avg3 = scMean(rs3);
+    const enough = rs1.length >= SC_MIN_N && rs3.length >= SC_MIN_N;
+    return { g, total: syms.length, loaded: rows.length, avg1, avg3, med1: scMedian(rs1), med3: scMedian(rs3),
+             n3: rs3.length, pos3: rs3.filter(v => v > 0).length, above, nMa: withMa.length,
+             pct: withMa.length ? above / withMa.length * 100 : null,
+             tag: enough ? scClassify(avg1, avg3) : null,
+             why: !rows.length ? 'no data' : !rs3.length ? 'no RS data' : 'few stocks' };
+  });
+}
+
+const SC_KEYS = { rs1m: r => r.avg1, rs3m: r => r.avg3, ab50: r => r.pct };
+function sortScorecard(rows) {
+  const f = SC_KEYS[scSort] || SC_KEYS.rs3m;
+  return rows.map((r, i) => ({ r, i })).sort((a, b) => {
+    const x = f(a.r), y = f(b.r);
+    if (x == null && y == null) return a.i - b.i;        // no data sinks to the bottom, ties keep watchlist order
+    if (x == null) return 1;
+    if (y == null) return -1;
+    return (y - x) || (a.i - b.i);
+  }).map(o => o.r);
+}
+
+function renderScorecard() {
+  const rowsEl = document.getElementById('scRows');
+  if (!rowsEl) return;
+  const data = computeScorecard();
+  const total = new Set(WATCHLIST.flatMap(g => g.tickers)).size;
+  const loaded = Object.values(wlData).filter(d => d.ma || d.d1 != null).length;
+  const hdrHi = [...data.filter(r => r.tag)].sort((a, b) => b.avg3 - a.avg3);
+  document.getElementById('scSub').textContent = (wlLoading || wlPending > 0) ? `loading ${loaded}/${total}…`
+    : (scCollapsed() && hdrHi.length > 1) ? `Strongest ${hdrHi[0].g.group} ${rsFmt(hdrHi[0].avg3)} · Weakest ${hdrHi[hdrHi.length - 1].g.group} ${rsFmt(hdrHi[hdrHi.length - 1].avg3)}`
+    : `${data.length} groups · ${total} stocks`;
+  document.querySelectorAll('#scCols .sc-colh').forEach(h => h.classList.toggle('active', h.dataset.sort === scSort));
+
+  const classed = data.filter(r => r.tag);
+  const byRs = [...classed].sort((a, b) => b.avg3 - a.avg3);
+  const hi = byRs[0], lo = byRs[byRs.length - 1];
+  const pctTxt = r => r.pct == null ? '' : ` · ${Math.round(r.pct)}% above 50D`;
+  document.getElementById('scSummary').innerHTML = !WATCHLIST.length ? 'No groups yet.'
+    : !classed.length ? (wlLoading || wlPending > 0 ? 'Waiting for data…' : 'Not enough data to classify the groups.')
+    : `<b>${classed.filter(r => r.tag === 'Leading').length}</b> of ${classed.length} groups are Leading (beating SPX over 1M and 3M).` +
+      (hi && lo && hi !== lo
+        ? `<br>Strongest: <b style="color:${hi.g.color}">${escHtml(hi.g.group)}</b> ${rsFmt(hi.avg3)}${pctTxt(hi)}<br>Weakest: <b style="color:${lo.g.color}">${escHtml(lo.g.group)}</b> ${rsFmt(lo.avg3)}${pctTxt(lo)}` : '');
+
+  rowsEl.innerHTML = WATCHLIST.length ? sortScorecard(data).map(r => {
+    const pc = r.pct == null ? '' : r.pct >= 70 ? 'hi' : r.pct >= 40 ? 'mid' : 'lo';
+    const tip = `${r.g.group}: ${r.loaded} of ${r.total} stocks loaded` +
+      (r.n3 ? ` · RS 1M avg ${rsFmt(r.avg1)} (median ${rsFmt(r.med1)}) · RS 3M avg ${rsFmt(r.avg3)} (median ${rsFmt(r.med3)}) · ${r.pos3} of ${r.n3} beat SPX over 3M` : '') +
+      (r.nMa ? ` · ${r.above} of ${r.nMa} above their 50-day average` : '');
+    const num = v => v == null ? '<div class="w-val flat">—</div>' : `<div class="w-val ${wlClass(v)}">${rsFmt(v)}</div>`;
+    return `<div class="sc-row${r.tag ? '' : ' dim'}" title="${escHtml(tip)}">
+      <div class="sc-name"><span class="sc-top"><span class="sc-dot" style="background:${r.g.color}"></span><span class="sc-gname" style="color:${r.g.color}">${escHtml(r.g.group)}</span><span class="sc-n">${r.loaded < r.total ? r.loaded + '/' : ''}${r.total}</span></span>
+        <span class="sc-tag ${r.tag ? r.tag.toLowerCase() : 'none'}">${r.tag || r.why}</span></div>
+      ${num(r.avg1)}${num(r.avg3)}
+      <div class="sc-pctcell">${r.pct == null ? '<span class="sc-pct" style="color:var(--text3)">—</span>' : `<span class="sc-pct ${pc}">${Math.round(r.pct)}%</span><span class="sc-bar"><i class="${pc}" style="width:${r.pct.toFixed(0)}%"></i></span>`}</div>
+    </div>`;
+  }).join('') : '<div class="sc-summary">Add a group with ✎ Edit to see it here.</div>';
+}
+function scheduleScorecard() { if (scTimer) return; scTimer = setTimeout(() => { scTimer = null; renderScorecard(); }, 150); }   // many stocks finish in a burst
+
+const scCollapsed = () => { try { const v = localStorage.getItem('sc_collapsed'); if (v === '1') return true; if (v === '0') return false; } catch {} return window.innerWidth < 1500; };   // your choice wins; otherwise collapsed when it would push the ETF bars down
+function applyScCollapsed() {
+  document.getElementById('scCard').classList.toggle('collapsed', scCollapsed());
+  document.getElementById('scToggle').textContent = scCollapsed() ? '+' : '−';
+}
+document.getElementById('scHead').addEventListener('click', () => { try { localStorage.setItem('sc_collapsed', scCollapsed() ? '0' : '1'); } catch {} applyScCollapsed(); renderScorecard(); });
+document.getElementById('scCols').addEventListener('click', e => { const h = e.target.closest('[data-sort]'); if (h) { scSort = h.dataset.sort; renderScorecard(); } });
+applyScCollapsed();
 
 // ─── WATCHLIST MANAGER ────────────────────────────────────────────────────────
 // Add/remove tickers and groups without editing code. Changes are saved in this browser (localStorage).
@@ -2328,7 +2489,7 @@ function afterWatchlistChange(save = true) {
   if (save) saveWatchlist();
   const fresh = syncWlData();
   if (earnData) { rebuildEarnIndex(); renderEarningsPanel(); }   // markers for removed tickers disappear right away
-  renderWatchlist(); renderScanner(); wmRender();
+  renderWatchlist(); renderScanner(); renderScorecard(); wmRender();
   fresh.forEach(s => loadWlSymbol(s, true));                    // only the NEW tickers are fetched
   if (fresh.length) scheduleEarningsRefresh();
 }
@@ -4148,6 +4309,7 @@ document.getElementById('refreshBtn').addEventListener('click', () => {
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 renderBarChart();
 renderWatchlist();
+renderScorecard();
 loadMarketOverview();
 loadSentiment();
 loadAll();
