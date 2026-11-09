@@ -169,7 +169,11 @@
   .wm-overlay.visible { display:flex; }
   .wm-modal { background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:16px 20px; width:min(780px,94vw); max-height:88vh; overflow-y:auto; position:relative; }
   .wm-title { font-size:11px; color:var(--accent); letter-spacing:1.5px; text-transform:uppercase; font-weight:600; margin-bottom:3px; }
-  .wm-count { font-size:9px; color:var(--text3); margin-bottom:12px; }
+  .wm-count { font-size:9px; color:var(--text3); margin-bottom:6px; }
+  .wm-sync { font-size:9.5px; line-height:1.6; margin-bottom:10px; color:var(--text3); }
+  .wm-sync:empty { display:none; }
+  .wm-sync.ok { color:var(--green); } .wm-sync.warn { color:var(--gold); } .wm-sync.err { color:var(--red); }
+  .wm-sync a { color:var(--accent); cursor:pointer; text-decoration:underline; }
   .wm-close { position:absolute; top:12px; right:16px; background:none; border:none; color:var(--text3); font-size:18px; cursor:pointer; line-height:1; }
   .wm-close:hover { color:var(--text); }
   .wm-add, .wm-newgroup { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
@@ -767,6 +771,8 @@
     <button class="wm-close" id="wmClose" title="Close (Esc)">✕</button>
     <div class="wm-title">✎ Manage Watchlist</div>
     <div class="wm-count" id="wmCount"></div>
+    <div class="wm-sync" id="wmSync"></div>
+    <div class="wm-sync warn" id="wmBackupNote" style="margin-top:-4px"></div>
     <div class="wm-add">
       <input type="text" id="wmTickers" placeholder="Add tickers, e.g. NVDA, AMD TSM" autocomplete="off" spellcheck="false">
       <select id="wmGroupSel" title="Add to this group"></select>
@@ -2179,13 +2185,18 @@ function sanitizeWatchlist(raw) {
   });
   return out;
 }
-function saveWatchlist() { try { localStorage.setItem(WL_STORE_KEY, JSON.stringify({ v: 1, groups: WATCHLIST })); } catch {} }
+let wlUpdated = 0;               // when the saved list last changed (ms). Decides which copy wins if the browser and GitHub differ.
+function saveWatchlist() {
+  wlUpdated = Date.now();
+  try { localStorage.setItem(WL_STORE_KEY, JSON.stringify({ v: 1, updated: wlUpdated, groups: WATCHLIST })); } catch {}
+  scheduleWatchlistPush();       // also keep a copy in your GitHub repo (when a token is set)
+}
 
 (function restoreSavedWatchlist() {
   try {
     const saved = JSON.parse(localStorage.getItem(WL_STORE_KEY) || 'null');
     const clean = sanitizeWatchlist(saved && saved.groups);
-    if (clean) WATCHLIST.splice(0, WATCHLIST.length, ...clean);
+    if (clean) { WATCHLIST.splice(0, WATCHLIST.length, ...clean); wlUpdated = Number(saved.updated) || 0; }   // lists saved by older versions have no timestamp (0)
   } catch {}
 })();
 
@@ -2436,9 +2447,126 @@ document.getElementById('scHead').addEventListener('click', () => { try { localS
 document.getElementById('scCols').addEventListener('click', e => { const h = e.target.closest('[data-sort]'); if (h) { scSort = h.dataset.sort; renderScorecard(); } });
 applyScCollapsed();
 
+// ─── WATCHLIST GITHUB SYNC ────────────────────────────────────────────────────
+// Browser storage belongs to ONE web address in ONE browser, so an edited list can silently "disappear" when the
+// dashboard is opened somewhere else (another browser, a local copy, a preview) or the browser clears its data.
+// A copy in your repo (watchlist.json, next to breadth-history.json) makes the list survive re-uploads, new
+// browsers and other devices.
+//   • Reading needs no token (public raw file).   • Writing uses the same GitHub token as the breadth history.
+//   • The newer copy wins (timestamp). A browser list replaced by a newer GitHub copy is kept as a backup.
+const WL_REMOTE_FILE = 'watchlist.json';
+const WL_BACKUP_KEY  = 'watchlist_v1_replaced';
+const wlSync = { state: 'local', at: 0, msg: '' };         // local | syncing | synced | error
+let wlSyncTimer = null, wlSyncBusy = false, wlSyncAgain = false;
+
+function b64utf8(s) { let bin = ''; new TextEncoder().encode(s).forEach(b => { bin += String.fromCharCode(b); }); return btoa(bin); }   // btoa alone breaks on accents/emoji
+
+function setWlSync(state, at, msg) { wlSync.state = state; wlSync.at = at || 0; wlSync.msg = msg || ''; renderWlSync(); }
+
+function renderWlSync() {
+  const el = document.getElementById('wmSync'), note = document.getElementById('wmBackupNote');
+  if (!el) return;
+  const s = wlSync, tokenSet = !!(getGithubToken(false));
+  const when = s.at ? new Date(s.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+  let html, cls = '';
+  if (s.state === 'syncing') html = '↻ Saving a copy to GitHub…';
+  else if (s.state === 'synced') { html = `☁ Saved to GitHub (${escHtml(GH_REPO)}/${WL_REMOTE_FILE}) at ${when}. It survives re-uploads and opens the same in any browser.`; cls = 'ok'; }
+  else if (s.state === 'error') { html = `✗ GitHub copy failed (${escHtml(s.msg)}). Your list is still saved in this browser. <a id="wmRetrySync">Retry</a> · <a id="wmChangeToken">Change token</a>`; cls = 'err'; }
+  else if (tokenSet) html = '☁ GitHub sync is on. Your next change is saved there too.';
+  else { html = '⚠ Saved in this browser only. Another browser, a cleared cache or a different web address will not see it. <a id="wmConnect">Connect GitHub</a> to keep a safe copy.'; cls = 'warn'; }
+  el.className = 'wm-sync' + (cls ? ' ' + cls : ''); el.innerHTML = html;
+  let backup = null; try { backup = localStorage.getItem(WL_BACKUP_KEY); } catch {}
+  if (note) note.innerHTML = backup ? 'This browser had a different list, and a newer one from GitHub replaced it. <a id="wmRestoreOld">Restore the previous list</a> · <a id="wmDismissOld">Dismiss</a>' : '';
+}
+
+const wlHttpHint = s => s === 401 ? ' — the token was rejected' : (s === 403 || s === 404) ? ' — check the token can write to this repo' : '';
+
+// null = no file in the repo yet · undefined = could not reach GitHub · {updated, groups} = the repo copy
+async function fetchRemoteWatchlist() {
+  if (!GH_OWNER || !GH_REPO) return undefined;
+  try {
+    const res = await fetch(`https://raw.githubusercontent.com/${GH_OWNER}/${GH_REPO}/main/${WL_REMOTE_FILE}?t=${Date.now()}`, { signal: AbortSignal.timeout(2000) });
+    if (res.status === 404) return null;
+    if (!res.ok) return undefined;
+    const j = await res.json();
+    const groups = sanitizeWatchlist(j && j.groups);
+    return groups ? { updated: Number(j.updated) || 0, groups } : undefined;
+  } catch { return undefined; }
+}
+
+function scheduleWatchlistPush(delay = 1500) { clearTimeout(wlSyncTimer); wlSyncTimer = setTimeout(pushWatchlist, delay); }   // many quick edits become one save
+
+async function pushWatchlist() {
+  const token = getGithubToken(false);
+  if (!token || !GH_OWNER || !GH_REPO) { setWlSync('local'); return; }
+  if (wlSyncBusy) { wlSyncAgain = true; return; }
+  wlSyncBusy = true; setWlSync('syncing');
+  try {
+    const body = JSON.stringify({ v: 1, updated: wlUpdated, groups: WATCHLIST }, null, 1);
+    const url = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${WL_REMOTE_FILE}`;
+    const hdr = { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const g = await fetch(url + '?t=' + Date.now(), { headers: hdr, signal: AbortSignal.timeout(15000) });
+      let sha;
+      if (g.status === 200) sha = (await g.json()).sha; else if (g.status !== 404) throw new Error('HTTP ' + g.status + wlHttpHint(g.status));
+      const put = await fetch(url, { method: 'PUT', headers: { ...hdr, 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(15000),
+        body: JSON.stringify({ message: 'watchlist: ' + new Date().toISOString().slice(0, 16).replace('T', ' '), content: b64utf8(body), ...(sha ? { sha } : {}) }) });
+      if (put.ok) { setWlSync('synced', Date.now()); return; }
+      if ((put.status === 409 || put.status === 422) && attempt === 0) continue;     // someone saved in between: re-read the file's version and retry once
+      throw new Error('HTTP ' + put.status + wlHttpHint(put.status));
+    }
+  } catch (e) { console.warn('[wl sync]', e.message); setWlSync('error', 0, e.message); }
+  finally { wlSyncBusy = false; if (wlSyncAgain) { wlSyncAgain = false; scheduleWatchlistPush(0); } }
+}
+
+// Runs once before the watchlist's data is fetched, so the right list is used from the start (waits at most ~2 s)
+async function syncWatchlistAtStartup() {
+  try {
+    const remote = await fetchRemoteWatchlist();
+    let raw = null; try { raw = localStorage.getItem(WL_STORE_KEY); } catch {}
+    const hasLocal = raw != null, token = getGithubToken(false);
+    if (remote === undefined) { setWlSync('local'); return; }                      // GitHub unreachable: carry on with what we have
+    if (remote && (!hasLocal || remote.updated > wlUpdated)) {                      // the repo copy is newer (or this browser has none)
+      if (hasLocal && JSON.stringify(WATCHLIST) !== JSON.stringify(remote.groups)) { try { localStorage.setItem(WL_BACKUP_KEY, raw); } catch {} }
+      WATCHLIST.splice(0, WATCHLIST.length, ...remote.groups);
+      wlUpdated = remote.updated;
+      try { localStorage.setItem(WL_STORE_KEY, JSON.stringify({ v: 1, updated: wlUpdated, groups: WATCHLIST })); } catch {}
+      setWlSync('synced', Date.now());
+    } else if (hasLocal && token && (!remote || wlUpdated > remote.updated)) scheduleWatchlistPush(0);   // this browser's copy is newer or the repo has none yet: save it there
+    else if (remote && wlUpdated === remote.updated) setWlSync('synced', Date.now());
+    else setWlSync('local');
+  } catch (e) { console.warn('[wl startup sync]', e.message); }
+}
+
+function wlAskToken(replace) {
+  const t = (window.prompt('Enter a GitHub Personal Access Token (ghp_… or github_pat_…) that can write to ' + GH_OWNER + '/' + GH_REPO + '.\n\nIt is the same token the breadth history uses.\nCreate one at github.com/settings/tokens (scope: repo).') || '').trim();
+  if (!t) return false;
+  try { localStorage.setItem('github_pat', t); } catch {}
+  return true;
+}
+function wlRestoreReplaced() {
+  let clean = null;
+  try { const j = JSON.parse(localStorage.getItem(WL_BACKUP_KEY) || 'null'); clean = sanitizeWatchlist(j && j.groups); } catch {}
+  try { localStorage.removeItem(WL_BACKUP_KEY); } catch {}
+  if (!clean) { renderWlSync(); return; }
+  WATCHLIST.splice(0, WATCHLIST.length, ...clean);
+  wmSelGroup = 0; wmLastRemoval = null;
+  afterWatchlistChange();                                       // saves it (newer timestamp) and pushes it to GitHub
+  wmSay('Restored the list this browser had before the GitHub copy replaced it.', 'ok');
+}
+document.getElementById('wmSync').addEventListener('click', e => {
+  const id = e.target.id;
+  if (id === 'wmConnect' || id === 'wmChangeToken') { e.preventDefault(); if (wlAskToken()) pushWatchlist(); else renderWlSync(); }
+  else if (id === 'wmRetrySync') { e.preventDefault(); pushWatchlist(); }
+});
+document.getElementById('wmBackupNote').addEventListener('click', e => {
+  if (e.target.id === 'wmRestoreOld') { e.preventDefault(); wlRestoreReplaced(); }
+  else if (e.target.id === 'wmDismissOld') { e.preventDefault(); try { localStorage.removeItem(WL_BACKUP_KEY); } catch {} renderWlSync(); }
+});
+
 // ─── WATCHLIST MANAGER ────────────────────────────────────────────────────────
 // Add/remove tickers and groups without editing code. Changes are saved in this browser (localStorage).
-// Nothing is saved until your first edit, and "Reset to defaults" returns to the built-in list.
+// Saved in this browser, plus a copy in your GitHub repo when a token is set (see WATCHLIST GITHUB SYNC). "Reset to defaults" restores the built-in list.
 const WL_MAX_TICKERS = 300;
 let wmSelGroup = 0, wmBusy = false, wmLastRemoval = null, wmEarnTimer = null;
 const wmEl = id => document.getElementById(id);
@@ -2495,6 +2623,7 @@ function afterWatchlistChange(save = true) {
 }
 
 function wmRender() {
+  renderWlSync();
   const total = new Set(WATCHLIST.flatMap(g => g.tickers)).size;
   wmEl('wmCount').textContent = `${total} tickers · ${WATCHLIST.length} groups` + (total >= WL_MAX_TICKERS ? ' (limit reached)' : ` · limit ${WL_MAX_TICKERS}`);
   if (wmSelGroup >= WATCHLIST.length) wmSelGroup = Math.max(0, WATCHLIST.length - 1);
@@ -2614,9 +2743,8 @@ function wmImport() {
 function wmReset() {
   if (!confirm('Reset the watchlist to the built-in default list? Your changes will be lost.')) return;
   WATCHLIST.splice(0, WATCHLIST.length, ...JSON.parse(JSON.stringify(WATCHLIST_DEFAULT)));
-  try { localStorage.removeItem(WL_STORE_KEY); } catch {}
   wmSelGroup = 0; wmLastRemoval = null;
-  afterWatchlistChange(false);                                  // don't re-save: back to "no custom list"
+  afterWatchlistChange();                                       // saved (and synced) as your list, so an older GitHub copy can't bring the old one back
   wmSay('Restored the default watchlist.', 'ok');
 }
 
@@ -4313,7 +4441,8 @@ renderScorecard();
 loadMarketOverview();
 loadSentiment();
 loadAll();
-loadWatchlist();
+// Fetch the watchlist's data once we know which list to use (a newer GitHub copy may replace this browser's; waits at most ~2 s)
+syncWatchlistAtStartup().then(() => { renderWatchlist(); renderScorecard(); loadWatchlist(); });
 setupSentimentClicks();
 setTimeout(() => loadEarningsCalendar(), 4000);  // background load so watchlist row markers appear
 
