@@ -353,6 +353,9 @@
   .sent-cell { background:var(--bg2); border:1px solid var(--border); border-radius:5px; padding:5px 10px 4px; display:flex; flex-direction:column; justify-content:flex-start; min-width:110px; flex:1; cursor:pointer; transition:border-color 0.15s; }
   .sent-cell:hover { border-color:var(--border2); }
   .sent-cell.no-chart { cursor:default; }
+  @media (max-width:1500px) { .sent-cell { padding:5px 7px 4px; min-width:96px; } .sent-price { font-size:12px; } }
+  @media (max-width:1430px) { .sentiment-bar { flex-wrap:wrap; } .sent-cell { flex:1 1 calc(20% - 6px); min-width:0; } }   /* ten cells (with 9-character prices like $4,300.50) no longer fit on one line: two rows of five */
+  @media (max-width:640px) { .sent-cell { flex-basis:calc(50% - 6px); } }
 
   /* Sentiment history modal */
   .sm-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:100; align-items:center; justify-content:center; }
@@ -360,7 +363,7 @@
   .sm-modal { background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:16px 20px; width:min(720px,92vw); position:relative; }
   .sm-title { font-size:11px; color:var(--accent); letter-spacing:1.5px; text-transform:uppercase; font-weight:600; margin-bottom:8px; }
   .sm-canvas-wrap { width:100%; height:200px; position:relative; }
-  .sm-meta { font-size:9px; color:var(--text3); margin-top:8px; display:flex; justify-content:space-between; }
+  .sm-meta { flex-wrap:wrap; gap:2px 10px; font-size:9px; color:var(--text3); margin-top:8px; display:flex; justify-content:space-between; }
   .sm-close { position:absolute; top:12px; right:16px; background:none; border:none; color:var(--text3); font-size:18px; cursor:pointer; line-height:1; }
   .sm-close:hover { color:var(--text); }
   .sm-toggle { position:absolute; top:11px; right:50px; display:flex; gap:4px; }
@@ -637,6 +640,9 @@
   <div class="sent-cell"><div class="sent-label">Bitcoin</div><div class="sent-top"><div class="sent-price loading" id="sent-btc-p">···</div><div class="sent-pct loading" id="sent-btc-c">···</div></div><canvas class="sent-spark" id="sent-btc-k"></canvas></div>
   <div class="sent-cell"><div class="sent-label">Ethereum</div><div class="sent-top"><div class="sent-price loading" id="sent-eth-p">···</div><div class="sent-pct loading" id="sent-eth-c">···</div></div><canvas class="sent-spark" id="sent-eth-k"></canvas></div>
   <div class="sent-cell"><div class="sent-label">USD Index</div><div class="sent-top"><div class="sent-price loading" id="sent-dxy-p">···</div><div class="sent-pct loading" id="sent-dxy-c">···</div></div><canvas class="sent-spark" id="sent-dxy-k"></canvas></div>
+  <div class="sent-cell" title="RSP: Invesco S&amp;P 500 Equal Weight ETF. Rising against SPX means broad participation. Click for the saved trend."><div class="sent-label">RSP</div><div class="sent-top"><div class="sent-price loading" id="sent-rsp-p">···</div><div class="sent-pct loading" id="sent-rsp-c">···</div></div><canvas class="sent-spark" id="sent-rsp-k"></canvas></div>
+  <div class="sent-cell" title="IWM: iShares Russell 2000 (small caps). A risk-appetite gauge. Click for the saved trend."><div class="sent-label">IWM</div><div class="sent-top"><div class="sent-price loading" id="sent-iwm-p">···</div><div class="sent-pct loading" id="sent-iwm-c">···</div></div><canvas class="sent-spark" id="sent-iwm-k"></canvas></div>
+  <div class="sent-cell" title="QQQE: Direxion Nasdaq-100 Equal Weight ETF. Compare with QQQ and NASDAQ for tech breadth. Click for the saved trend."><div class="sent-label">QQQE</div><div class="sent-top"><div class="sent-price loading" id="sent-qqqe-p">···</div><div class="sent-pct loading" id="sent-qqqe-c">···</div></div><canvas class="sent-spark" id="sent-qqqe-k"></canvas></div>
 </div>
 
 <!-- Sentiment History Modal -->
@@ -2447,6 +2453,163 @@ document.getElementById('scHead').addEventListener('click', () => { try { localS
 document.getElementById('scCols').addEventListener('click', e => { const h = e.target.closest('[data-sort]'); if (h) { scSort = h.dataset.sort; renderScorecard(); } });
 applyScCollapsed();
 
+// ─── INDICATOR ARCHIVE (GitHub) ───────────────────────────────────────────────
+// RSP, IWM and QQQE keep their daily bars in your repo (indicators-history.json) so their trend view rests on a
+// durable record, not just what Yahoo returns today.
+//   • Only COMPLETED sessions are saved: today's bar is shown but stored after the close (Yahoo returns trading days only,
+//     so weekends never appear).    • Reading needs no token; writing uses the same GitHub token as the watchlist.
+//   • First run seeds ~2 years from Yahoo; later visits top it up. Several browsers/devices merge by date.
+const IND_ARCHIVE_SYMS = ['RSP', 'IWM', 'QQQE'];
+const IND_ARCHIVE_FILE = 'indicators-history.json';
+const IND_REFRESH_MS = 5 * 60 * 1000;
+const indArch = { rows: { RSP: [], IWM: [], QQQE: [] }, saved: null, at: 0, status: 'idle', msg: '', remoteOk: undefined, promise: null };
+let indPushTimer = null, indPushBusy = false, indPushAgain = false;
+
+const r4 = v => Math.round(v * 10000) / 10000;
+function etClock() {
+  const [h, m] = new Date().toLocaleTimeString('en-GB', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' }).split(':').map(Number);
+  return { date: etToday(), minutes: h * 60 + m };
+}
+// a daily bar is final once its date is before today (US Eastern), or on the same day after the close
+const barIsFinal = (date, clk = etClock()) => date < clk.date || (date === clk.date && clk.minutes >= 16 * 60 + 20);
+
+function barsToRows(data) {
+  const r = data?.chart?.result?.[0];
+  if (!r) return [];
+  const ts = r.timestamp ?? [], q = r.indicators?.quote?.[0] ?? {}, out = [];
+  ts.forEach((t, i) => {
+    const cl = q.close?.[i];
+    if (cl == null) return;
+    const o = q.open?.[i] ?? cl;
+    out.push([smDateKey(t), r4(o), r4(Math.max(q.high?.[i] ?? cl, o, cl)), r4(Math.min(q.low?.[i] ?? cl, o, cl)), r4(cl)]);
+  });
+  return out;
+}
+function mergeRows(a, b) {
+  const m = new Map((a || []).map(r => [r[0], r]));
+  (b || []).forEach(r => m.set(r[0], r));                       // newer data wins for the same date
+  return [...m.values()].sort((x, y) => x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0);
+}
+function cleanArchive(series) {                                 // keep only well-formed rows for the symbols we track
+  const out = {};
+  for (const s of IND_ARCHIVE_SYMS) {
+    out[s] = (Array.isArray(series?.[s]) ? series[s] : [])
+      .filter(r => Array.isArray(r) && r.length >= 5 && /^\d{4}-\d{2}-\d{2}$/.test(r[0]) && r.slice(1, 5).every(v => typeof v === 'number' && isFinite(v) && v > 0))   // all four prices must be present
+      .map(r => [r[0], r4(r[1]), r4(r[2]), r4(r[3]), r4(r[4])]);
+  }
+  return out;
+}
+function archiveRangeFor(rows) {                                // how much history to ask Yahoo for, so a long absence leaves no gap
+  if (!rows || rows.length < 5) return '2y';
+  const days = Math.max(0, ymdDiff(etToday(), rows[rows.length - 1][0]));
+  return days <= 25 ? '1mo' : days <= 80 ? '3mo' : days <= 170 ? '6mo' : days <= 350 ? '1y' : '5y';
+}
+function utf8FromB64(b64) { const bin = atob(String(b64).replace(/\s/g, '')); return new TextDecoder().decode(Uint8Array.from(bin, ch => ch.charCodeAt(0))); }
+
+function indArchStatus(state, at, msg) {
+  indArch.status = state; indArch.msg = msg || '';
+  if (smState.tk && IND_ARCHIVE_SYMS.includes(smState.tk.sym) && document.getElementById('smOverlay').classList.contains('visible')) renderArchiveNote(smState.tk);
+}
+function renderArchiveNote(tk) {
+  const el = document.getElementById('smSource');
+  if (!el || !tk) return;
+  const rows = indArch.rows[tk.sym] || [];
+  if (!rows.length) { el.textContent = 'Source: Yahoo Finance'; return; }
+  const base = `Saved history: ${rows.length} sessions since ${rows[0][0]}`, st = indArch.status;
+  el.textContent = st === 'synced' ? base + ' · ☁ GitHub ✓'
+    : st === 'syncing' ? base + ' · ↻ saving…'
+    : st === 'error' ? base + ' · ✗ not saved: ' + indArch.msg
+    : st === 'local' ? base + ' · ⚠ not saved (no GitHub token: ✎ Edit → Connect GitHub)'
+    : indArch.remoteOk === false ? base + ' · ⚠ GitHub unreachable'
+    : base;
+}
+
+// null = no file yet · undefined = could not reach GitHub · {RSP:[…],…} = the saved history
+async function fetchRemoteArchive() {
+  if (!GH_OWNER || !GH_REPO) return undefined;
+  try {
+    const res = await fetch(`https://raw.githubusercontent.com/${GH_OWNER}/${GH_REPO}/main/${IND_ARCHIVE_FILE}?t=${Date.now()}`, { signal: AbortSignal.timeout(6000) });
+    if (res.status === 404) return null;
+    if (!res.ok) return undefined;
+    const j = await res.json();
+    return j && typeof j.series === 'object' ? cleanArchive(j.series) : undefined;
+  } catch { return undefined; }
+}
+
+// Saved history topped up with fresh Yahoo bars; returns {RSP:[[date,o,h,l,c],…],…}. Cached for 5 minutes.
+async function syncIndicatorArchive(force = false) {
+  if (indArch.promise) return indArch.promise;
+  if (!force && indArch.at && Date.now() - indArch.at < IND_REFRESH_MS) return indArch.rows;
+  indArch.promise = (async () => {
+    try {
+      const remote = await fetchRemoteArchive();
+      indArch.remoteOk = remote !== undefined;
+      const base = remote || cleanArchive({}), known = {};
+      for (const s of IND_ARCHIVE_SYMS) known[s] = mergeRows(indArch.rows[s], base[s]);
+      await Promise.all(IND_ARCHIVE_SYMS.map(async s => {
+        try { known[s] = mergeRows(known[s], barsToRows(await fetchOne(`${YF_BASE}/v8/finance/chart/${s}?range=${archiveRangeFor(known[s])}&interval=1d`))); }
+        catch (e) { console.warn('[archive yahoo]', s, e.message); }
+      }));
+      indArch.rows = known;
+      if (remote) indArch.saved = remote;
+      indArch.at = Date.now();
+      if (!archiveDiffers()) { if (indArch.saved) indArchStatus('synced'); }           // nothing to save: say so straight away
+      else indArchStatus(getGithubToken(false) ? 'syncing' : 'local');
+      scheduleIndicatorPush();
+    } catch (e) { console.warn('[archive]', e.message); }
+    finally { indArch.promise = null; }
+    return indArch.rows;
+  })();
+  return indArch.promise;
+}
+
+function archiveDiffers() {                                     // is there a completed session that GitHub doesn't have (or has differently)?
+  const clk = etClock();
+  return IND_ARCHIVE_SYMS.some(s => {
+    const saved = new Map(((indArch.saved || {})[s] || []).map(r => [r[0], r.join()]));
+    return (indArch.rows[s] || []).some(r => barIsFinal(r[0], clk) && saved.get(r[0]) !== r.join());
+  });
+}
+function scheduleIndicatorPush(delay = 2500) { clearTimeout(indPushTimer); indPushTimer = setTimeout(pushIndicatorArchive, delay); }
+
+async function pushIndicatorArchive() {
+  if (!archiveDiffers()) { if (indArch.saved) indArchStatus('synced'); return; }
+  const token = getGithubToken(false);
+  if (!token || !GH_OWNER || !GH_REPO) { indArchStatus('local'); return; }
+  if (indPushBusy) { indPushAgain = true; return; }
+  indPushBusy = true; indArchStatus('syncing');
+  try {
+    const url = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${IND_ARCHIVE_FILE}`;
+    const hdr = { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const g = await fetch(url + '?t=' + Date.now(), { headers: hdr, signal: AbortSignal.timeout(15000) });
+      let sha, remote = cleanArchive({});
+      if (g.status === 200) { const j = await g.json(); sha = j.sha; try { remote = cleanArchive(JSON.parse(utf8FromB64(j.content)).series); } catch {} }
+      else if (g.status !== 404) throw new Error('HTTP ' + g.status + wlHttpHint(g.status));
+      const clk = etClock(), out = {};                          // union with whatever another browser saved meanwhile
+      for (const s of IND_ARCHIVE_SYMS) out[s] = mergeRows(remote[s], (indArch.rows[s] || []).filter(r => barIsFinal(r[0], clk)));
+      const put = await fetch(url, { method: 'PUT', headers: { ...hdr, 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(20000),
+        body: JSON.stringify({ message: 'indicators: ' + new Date().toISOString().slice(0, 16).replace('T', ' '),
+          content: b64utf8(JSON.stringify({ v: 1, updated: Date.now(), series: out })), ...(sha ? { sha } : {}) }) });
+      if (put.ok) { indArch.saved = out; for (const s of IND_ARCHIVE_SYMS) indArch.rows[s] = mergeRows(indArch.rows[s], out[s]); indArchStatus('synced', Date.now()); return; }
+      if ((put.status === 409 || put.status === 422) && attempt === 0) continue;
+      throw new Error('HTTP ' + put.status + wlHttpHint(put.status));
+    }
+  } catch (e) { console.warn('[archive push]', e.message); indArchStatus('error', 0, e.message); }
+  finally { indPushBusy = false; if (indPushAgain) { indPushAgain = false; scheduleIndicatorPush(0); } }
+}
+
+// What the trend view loads: Yahoo-shaped data, from the saved history for the archived tickers
+async function getSmData(tk) {
+  const yahoo = () => fetchOne(`${YF_BASE}/v8/finance/chart/${tk.sym}?range=3mo&interval=1d`);
+  if (!IND_ARCHIVE_SYMS.includes(tk.sym)) return yahoo();
+  const rows = ((await syncIndicatorArchive())[tk.sym]) || [];
+  if (rows.length < 20) return yahoo();                         // nothing usable saved and the top-up failed: ask Yahoo directly
+  const cutoff = ymdAdd(rows[rows.length - 1][0], -92), win = rows.filter(r => r[0] > cutoff);       // the same 3-month window as the other indicators
+  return { chart: { result: [{ timestamp: win.map(r => Date.parse(r[0] + 'T12:00:00Z') / 1000),
+    indicators: { quote: [{ open: win.map(r => r[1]), high: win.map(r => r[2]), low: win.map(r => r[3]), close: win.map(r => r[4]) }] } }] } };
+}
+
 // ─── WATCHLIST GITHUB SYNC ────────────────────────────────────────────────────
 // Browser storage belongs to ONE web address in ONE browser, so an edited list can silently "disappear" when the
 // dashboard is opened somewhere else (another browser, a local copy, a preview) or the browser clears its data.
@@ -3348,7 +3511,8 @@ function collectIndicators() {
 
   // Sentiment indicators from sentiment bar
   const sentMap = { gold:'Gold Price', silver:'Silver Price', oil:'Crude Oil Price',
-    tnx:'10-Year Treasury Yield', btc:'Bitcoin', eth:'Ethereum', dxy:'USD Index' };
+    tnx:'10-Year Treasury Yield', btc:'Bitcoin', eth:'Ethereum', dxy:'USD Index',
+    rsp:'RSP (S&P 500 equal weight)', iwm:'IWM (Russell 2000 small caps)', qqqe:'QQQE (Nasdaq-100 equal weight)' };
   SENTIMENT_TICKERS.forEach(tk => {
     const pEl = document.getElementById('sent-'+tk.id+'-p');
     const cEl = document.getElementById('sent-'+tk.id+'-c');
@@ -3970,10 +4134,13 @@ const SENTIMENT_TICKERS = [
   { id:'btc',    sym:'BTC-USD', label:'Bitcoin',               fmt: p => '$'+p.toLocaleString('en-US',{maximumFractionDigits:0}) },
   { id:'eth',    sym:'ETH-USD', label:'Ethereum',              fmt: p => '$'+p.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) },
   { id:'dxy',    sym:'DX-Y.NYB',label:'USD Index',             fmt: p => p.toFixed(3) },
+  { id:'rsp',  sym:'RSP',  label:'RSP · S&P 500 Equal Weight',  fmt: p => '$'+p.toFixed(2) },
+  { id:'iwm',  sym:'IWM',  label:'IWM · Russell 2000 (small caps)', fmt: p => '$'+p.toFixed(2) },
+  { id:'qqqe', sym:'QQQE', label:'QQQE · Nasdaq-100 Equal Weight', fmt: p => '$'+p.toFixed(2) },
 ];
 
 // Sentiment cells that support 3-month chart (Gold, Silver, Oil, 10Y Yield)
-const SENT_CHART_IDS = new Set(['gold','silver','oil','tnx','btc','eth','dxy']);
+const SENT_CHART_IDS = new Set(['gold','silver','oil','tnx','btc','eth','dxy','rsp','iwm','qqqe']);
 
 // ─── SENTIMENT 3-MONTH CHART (candles / line + market-index overlay) ──────────
 let smState = { tk: null, pts: [], mode: 'candle', ovl: 'spx', ovlSeries: null };   // pts: [{t,o,h,l,c}] daily bars
@@ -4275,6 +4442,7 @@ async function showSentimentHistory(tk) {
 
   titleEl.textContent = tk.label + ' — 3-Month Trend';
   metaEl.textContent  = 'Loading…';
+  document.getElementById('smSource').textContent = 'Source: Yahoo Finance';
   smState.tk = tk; smState.pts = []; smState.ovlSeries = null;
   const corrEl = document.getElementById('smCorr'); corrEl.textContent = ''; corrEl.title = '';
   syncSmToggle(); syncSmOvlToggle(); hideSmHover();
@@ -4287,7 +4455,7 @@ async function showSentimentHistory(tk) {
     const usedKey = smState.ovl;
     let ovlErr = '';
     const ovlP = usedKey === 'off' ? Promise.resolve(null) : loadSmIndex(usedKey).catch(e => { ovlErr = e.message; return null; });
-    const [data, usedBars] = await Promise.all([fetchOne(`${YF_BASE}/v8/finance/chart/${tk.sym}?range=3mo&interval=1d`), ovlP]);
+    const [data, usedBars] = await Promise.all([getSmData(tk), ovlP]);
     if (req !== smReq) return;                                 // a newer click superseded this one
     const result = data?.chart?.result?.[0];
     if (!result) throw new Error('no data');
@@ -4313,6 +4481,7 @@ async function showSentimentHistory(tk) {
     const avgR = pts.reduce((s, p) => s + (isY ? (p.h - p.l) * 100 : (p.h - p.l) / p.c * 100), 0) / N;
     metaEl.textContent = `${N} sessions · ${fmtSmDate(first.t)} → ${fmtSmDate(last.t)} · 3M ${chg >= 0 ? '+' : ''}${chg.toFixed(isY ? 1 : 2)}${isY ? ' bp' : '%'}` +
       ` · range ${fmtSmVal(tk, lo)}–${fmtSmVal(tk, hi)} · avg daily range ${avgR.toFixed(isY ? 1 : 2)}${isY ? ' bp' : '%'}`;
+    if (IND_ARCHIVE_SYMS.includes(tk.sym)) renderArchiveNote(tk);       // "Saved history: N sessions since …" + whether GitHub has it
     if (switched) setSmOverlay(smState.ovl);                   // loads + applies the overlay the user switched to
   } catch (e) {
     if (req !== smReq) return;
@@ -4445,6 +4614,7 @@ loadAll();
 syncWatchlistAtStartup().then(() => { renderWatchlist(); renderScorecard(); loadWatchlist(); });
 setupSentimentClicks();
 setTimeout(() => loadEarningsCalendar(), 4000);  // background load so watchlist row markers appear
+setTimeout(() => syncIndicatorArchive(), 3000);   // top up / save the RSP, IWM, QQQE history in the background
 
 </script>
 </body>
